@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
-"""Phase 9 CLI ergonomics tests."""
+"""Phase 9 CLI ergonomics and release-version tests."""
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 import unittest
 
 import run_research
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+class Phase9ReleaseVersionTests(unittest.TestCase):
+    def test_phase9_release_candidate_is_1_1_0(self):
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "1.1.0")
 
 
 class ReferenceUrlCliTests(unittest.TestCase):
