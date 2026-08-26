@@ -2,10 +2,12 @@
 """Regression tests for Douyin provider live-verification metadata."""
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 
 from endpoint_registry import EndpointRegistry
 
+ROOT = Path(__file__).resolve().parent.parent
 
 LIVE_VERIFIED_CAPABILITIES = {
     "video_detail_v3",
@@ -18,6 +20,9 @@ LIVE_VERIFIED_CAPABILITIES = {
 
 
 class DouyinProviderVerificationTests(unittest.TestCase):
+    def test_release_candidate_is_1_1_3(self):
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "1.1.3")
+
     def test_six_real_provider_contracts_are_live_verified_with_run_metadata(self):
         registry = EndpointRegistry()
         for capability in sorted(LIVE_VERIFIED_CAPABILITIES):
