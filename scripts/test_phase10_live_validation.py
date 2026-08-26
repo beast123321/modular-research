@@ -16,8 +16,10 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class DouyinLiveValidationTests(unittest.TestCase):
-    def test_release_candidate_is_1_1_2(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "1.1.2")
+    def test_release_is_at_least_1_1_2(self):
+        version = tuple(int(part) for part in (ROOT / "VERSION").read_text(encoding="utf-8").strip().split("."))
+        self.assertEqual(len(version), 3)
+        self.assertGreaterEqual(version, (1, 1, 2))
 
     def test_douyin_probe_builder_is_bounded_and_starts_from_reference_and_search(self):
         builder = getattr(live_validation, "build_douyin_probes", None)
