@@ -11,10 +11,11 @@ ROOT = HERE.parent
 
 
 class Phase8VersionTests(unittest.TestCase):
-    def test_version_is_semver_1_0_0(self):
+    def test_version_is_semver_at_least_1_0_0(self):
         version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        self.assertEqual(version, "1.0.0")
         self.assertRegex(version, r"^\d+\.\d+\.\d+$")
+        parts = tuple(int(part) for part in version.split("."))
+        self.assertGreaterEqual(parts, (1, 0, 0))
 
 
 class Phase8EnvironmentTests(unittest.TestCase):

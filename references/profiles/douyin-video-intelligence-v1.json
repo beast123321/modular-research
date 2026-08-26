@@ -1,0 +1,55 @@
+{
+  "id": "douyin-video-intelligence-v1",
+  "version": "1.0",
+  "platform": "douyin",
+  "default_provider": "tikhub",
+  "supported_goals": [
+    "trend_discovery",
+    "content_opportunities",
+    "low_follower_breakouts",
+    "creative_patterns",
+    "hooks",
+    "selling_angles",
+    "formats",
+    "creator_analysis",
+    "voc",
+    "purchase_objections",
+    "competitor_analysis",
+    "product_validation"
+  ],
+  "required_capabilities": [
+    "video_search",
+    "video_detail_v3",
+    "video_comments_v3",
+    "creator_posts_v3",
+    "user_profile_v3",
+    "video_statistics_v3"
+  ],
+  "default_content_scope": {
+    "organic": true,
+    "ads": false,
+    "comments": true,
+    "creators": true,
+    "trends": true,
+    "shop": false
+  },
+  "depth_presets": {
+    "quick": {"candidate_limit": 50, "creator_limit": 5, "comment_video_limit": 5, "comment_pages": 1, "deep_analysis_limit": 5},
+    "standard": {"candidate_limit": 200, "creator_limit": 20, "comment_video_limit": 20, "comment_pages": 3, "deep_analysis_limit": 15},
+    "deep": {"candidate_limit": 500, "creator_limit": 50, "comment_video_limit": 50, "comment_pages": 5, "deep_analysis_limit": 30}
+  },
+  "stages": [
+    "REFERENCE_SEED",
+    "ORGANIC_DISCOVERY",
+    "CHEAP_RANKING",
+    "CREATOR_CONTEXT",
+    "VOC",
+    "VIDEO_UNDERSTANDING",
+    "PATTERN_MINING",
+    "FINDINGS",
+    "HYPOTHESES",
+    "BRIEFS"
+  ],
+  "analysis_modules": ["metrics", "ranking", "voc", "findings", "patterns"],
+  "output_contracts": ["evidence", "findings", "creative_analysis_requests", "patterns", "synthesis_request", "media_briefs"]
+}

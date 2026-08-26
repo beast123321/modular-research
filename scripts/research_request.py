@@ -32,6 +32,25 @@ def _dedupe_strings(values: list[str] | tuple[str, ...] | None) -> list[str]:
     return out
 
 
+def _normalize_reference_content(values: Any, default_platform: str) -> list[dict[str, str | None]]:
+    if values in (None, []):
+        return []
+    if not isinstance(values, list):
+        raise ValueError("reference_content must be an array")
+    out: list[dict[str, str | None]] = []
+    for raw in values:
+        if not isinstance(raw, dict):
+            raise ValueError("reference_content items must be objects")
+        platform = str(raw.get("platform") or default_platform).strip().lower()
+        url = str(raw.get("url") or "").strip() or None
+        content_id = str(raw.get("content_id") or "").strip() or None
+        role = str(raw.get("role") or "reference").strip() or "reference"
+        if not url and not content_id:
+            raise ValueError("reference_content item requires url or content_id")
+        out.append({"platform": platform, "url": url, "content_id": content_id, "role": role})
+    return out
+
+
 @dataclass
 class ResearchRequest:
     topic: str
@@ -46,6 +65,7 @@ class ResearchRequest:
     seed_keywords: list[str] = field(default_factory=list)
     competitors: list[str] = field(default_factory=list)
     brands: list[str] = field(default_factory=list)
+    reference_content: list[dict[str, str | None]] = field(default_factory=list)
     video_filters: dict[str, Any] = field(default_factory=dict)
     sample_size_overrides: dict[str, Any] = field(default_factory=dict)
     output_preferences: dict[str, Any] = field(default_factory=dict)
@@ -78,6 +98,7 @@ class ResearchRequest:
             time_range=dict(data.get("time_range") or {}), content_scope=dict(data.get("content_scope") or {}),
             audience=(str(data["audience"]).strip() if data.get("audience") else None), seed_keywords=_dedupe_strings(data.get("seed_keywords")),
             competitors=_dedupe_strings(data.get("competitors")), brands=_dedupe_strings(data.get("brands")),
+            reference_content=_normalize_reference_content(data.get("reference_content"), platform),
             video_filters=dict(data.get("video_filters") or {}), sample_size_overrides=dict(data.get("sample_size_overrides") or {}),
             output_preferences=dict(data.get("output_preferences") or {}), depth=depth,
             outputs=_dedupe_strings(data.get("outputs")) or ["evidence", "findings"],
