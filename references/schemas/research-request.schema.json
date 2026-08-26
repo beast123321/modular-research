@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://modular-research.local/schemas/research-request.schema.json",
+  "title": "Modular Research ResearchRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["topic", "platform", "research_goals"],
+  "properties": {
+    "schema_version": {"type":"string","const":"1.0"},"topic":{"type":"string","minLength":1},"platform":{"type":"string","minLength":1},"market":{"type":["string","null"]},"language":{"type":["string","null"]},
+    "research_goals":{"type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","enum":["trend_discovery","content_opportunities","low_follower_breakouts","creative_patterns","hooks","selling_angles","formats","creator_analysis","ads_analysis","retention_analysis","voc","purchase_objections","competitor_analysis","product_validation"]}},
+    "time_range":{"type":"object"},"content_scope":{"type":"object"},"audience":{"type":["string","null"]},"seed_keywords":{"type":"array","items":{"type":"string"}},"competitors":{"type":"array","items":{"type":"string"}},"brands":{"type":"array","items":{"type":"string"}},"video_filters":{"type":"object"},"sample_size_overrides":{"type":"object"},"output_preferences":{"type":"object"},"depth":{"type":"string","enum":["quick","standard","deep"],"default":"standard"},"outputs":{"type":"array","items":{"type":"string"}},"user_goal_text":{"type":["string","null"]}
+  }
+}

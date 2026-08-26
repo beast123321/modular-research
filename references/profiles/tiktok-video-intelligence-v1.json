@@ -1,0 +1,13 @@
+{
+  "id": "tiktok-video-intelligence-v1",
+  "version": "1.0",
+  "platform": "tiktok",
+  "default_provider": "tikhub",
+  "supported_goals": ["trend_discovery","content_opportunities","creative_patterns","hooks","selling_angles","formats","creator_analysis","ads_analysis","retention_analysis","voc","purchase_objections","competitor_analysis","product_validation"],
+  "required_capabilities": ["creator_search_insights","video_search","creator_posts","video_comments"],
+  "default_content_scope": {"organic":true,"ads":false,"comments":false,"creators":false,"trends":false,"shop":false},
+  "depth_presets": {"quick":{"keyword_limit":3,"candidate_limit":50,"deep_analysis_limit":10,"creator_limit":5,"comment_video_limit":5,"ads_limit":10,"ad_deep_limit":3},"standard":{"keyword_limit":8,"candidate_limit":300,"deep_analysis_limit":40,"creator_limit":20,"comment_video_limit":20,"ads_limit":30,"ad_deep_limit":10},"deep":{"keyword_limit":20,"candidate_limit":800,"deep_analysis_limit":80,"creator_limit":50,"comment_video_limit":50,"ads_limit":80,"ad_deep_limit":25}},
+  "stages": ["DEMAND","ORGANIC_DISCOVERY","CHEAP_RANKING","CREATOR_CONTEXT","ADS_DISCOVERY","VOC","CREATIVE_ANALYSIS","VIDEO_UNDERSTANDING","PATTERN_MINING","FINDINGS","HYPOTHESES","BRIEFS"],
+  "analysis_modules": ["metrics","ranking","voc","creative","patterns","findings","briefs"],
+  "output_contracts": ["evidence","findings","patterns","creative_hypotheses","media_briefs"]
+}

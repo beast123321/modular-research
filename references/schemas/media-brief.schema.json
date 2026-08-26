@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Modular Research Media Brief",
+  "type": "object",
+  "required": ["id", "hypothesis_id", "objective", "timeline", "evidence_refs", "confidence"]
+}

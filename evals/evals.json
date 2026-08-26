@@ -1,0 +1,62 @@
+{
+  "skill": "modular-research",
+  "description": "验证三层架构（配套/核心①/核心②）在真实输入下的行为。每个 case 描述输入、应触发的模块、期望结果。",
+  "cases": [
+    {
+      "id": "no_api_key",
+      "name": "无密钥时优雅降级",
+      "input": "用户未配置 TIKHUB_API_KEY 等环境变量",
+      "module": "api_research_core.resolve_api_key",
+      "expect": "返回 (None, '环境变量 <name> 未设置')，不抛异常、不打印密钥本身"
+    },
+    {
+      "id": "cost_estimate",
+      "name": "阶梯折扣计费正确",
+      "input": "estimate_cost(150, Decimal('0.001'))",
+      "module": "api_research_core.estimate_cost",
+      "expect": "返回 estimated_total_usd 与 average_unit_price_usd，且含分档明细"
+    },
+    {
+      "id": "redact_secrets",
+      "name": "脱敏不泄露密钥",
+      "input": "redact_payload({'token':'abc','data':{'sign':'xyz'}})",
+      "module": "api_research_core.redact_payload",
+      "expect": "token 与 sign 的值被替换为 <redacted>"
+    },
+    {
+      "id": "plan_pet_socks",
+      "name": "宠物防滑袜选题规划（含付费环节标注）",
+      "input": "decompose_task('宠物防滑袜选题调研', keywords=['宠物防滑袜','狗狗防滑','猫打滑'])",
+      "module": "research_planner.decompose_task",
+      "expect": "plan 含 video_search 且 blocked_by_paid 包含它；total_cost_usd > 0；notes 提示搜索需付费额度"
+    },
+    {
+      "id": "sample_validation",
+      "name": "小样本验证拦截缺字段",
+      "input": "validate_sample(缺 author.follower_count 的响应, 'video_detail')",
+      "module": "research_planner.validate_sample",
+      "expect": "返回 (False, reasons)，reasons 指出缺少 data.aweme_detail.author.follower_count"
+    },
+    {
+      "id": "low_follower_hit",
+      "name": "低粉爆款关联判定",
+      "input": "detect_low_follower_hits([小账号高互动记录])",
+      "module": "analysis_engine.detect_low_follower_hits",
+      "expect": "返回该记录且带 engagement_per_follower，按比值降序"
+    },
+    {
+      "id": "pain_cluster",
+      "name": "评论痛点聚类",
+      "input": "cluster_pain_points(评论列表, 分类法)",
+      "module": "analysis_engine.cluster_pain_points",
+      "expect": "返回 summary(各标签计数) 与 examples(示例评论)，未命中归'其他'"
+    },
+    {
+      "id": "real_data_e2e",
+      "name": "端到端跑通真实数据（宠物防滑袜 demo）",
+      "input": "demo_pet_socks.py：规划 + test_video.json 验证 + Excel 评论聚类",
+      "module": "all",
+      "expect": "三层均无报错，输出费用预览、样本通过、真实评论聚类结果"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Modular Research CreativeAnalysis V1",
+  "type": "object",
+  "required": ["schema_version", "video_id", "analyzer", "timeline", "confidence", "evidence_refs"],
+  "properties": {
+    "schema_version": {"const":"1.0"},
+    "video_id": {"type":"string","minLength":1},
+    "analyzer": {"type":"object","required":["name","mode"],"properties":{"name":{"type":"string","minLength":1},"version":{"type":["string","null"]},"mode":{"type":"string","minLength":1}}},
+    "hook_type":{"type":["string","null"]},"hook_text":{"type":["string","null"]},"product_visible_at":{"type":["number","null"],"minimum":0},"format":{"type":["string","null"]},"selling_angle":{"type":["string","null"]},"proof_type":{"type":["string","null"]},"cta_text":{"type":["string","null"]},"cta_at":{"type":["number","null"],"minimum":0},"shot_count":{"type":["integer","null"],"minimum":0},"avg_shot_length":{"type":["number","null"],"minimum":0},"visual_style":{"type":["string","null"]},"timeline":{"type":"array"},"confidence":{"type":"object"},"evidence_refs":{"type":"array","items":{"type":"string"}}
+  }
+}

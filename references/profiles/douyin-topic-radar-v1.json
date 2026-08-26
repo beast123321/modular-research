@@ -1,0 +1,13 @@
+{
+  "id": "douyin-topic-radar-v1",
+  "version": "1.0",
+  "platform": "douyin",
+  "default_provider": "tikhub",
+  "supported_goals": ["trend_discovery","content_opportunities","low_follower_breakouts","creator_analysis","voc"],
+  "required_capabilities": ["video_detail","video_comments","user_profile"],
+  "default_content_scope": {"organic":true,"ads":false,"comments":true,"creators":true,"trends":true,"shop":false},
+  "depth_presets": {"quick":{"candidate_limit":30,"deep_analysis_limit":10},"standard":{"candidate_limit":100,"deep_analysis_limit":30},"deep":{"candidate_limit":300,"deep_analysis_limit":60}},
+  "stages": ["DISCOVERY","CHEAP_RANKING","CREATOR_CONTEXT","VOC","FINDINGS"],
+  "analysis_modules": ["metrics","ranking","voc","findings"],
+  "output_contracts": ["evidence","findings"]
+}

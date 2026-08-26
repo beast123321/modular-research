@@ -1,0 +1,17 @@
+{
+  "provider": "tikhub",
+  "platform": "douyin",
+  "api_base": "https://api.tikhub.dev",
+  "auth_scheme": "Bearer",
+  "api_key_env": "TIKHUB_API_KEY",
+  "api_key": "",
+  "keychain_service": "tikhub",
+  "keychain_account": "api-key",
+  "default_unit_price_usd": "0.001",
+  "output_dir": "social-research",
+  "analysis": {
+    "follower_threshold": 50000,
+    "engagement_min": 1000,
+    "engagement_score_field": "digg_count"
+  }
+}

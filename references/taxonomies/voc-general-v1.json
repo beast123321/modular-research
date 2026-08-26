@@ -1,0 +1,19 @@
+{
+  "version": "voc-general-v1",
+  "labels": {
+    "QUESTION": ["?","？","how ","what ","where ","when ","why ","which ","can i","does it","is it","怎么","什么","哪里","哪儿","为什么","吗","嘛"],
+    "PURCHASE_INTENT": ["where can i buy","where to buy","buy this","purchase","order","link please","need the link","want one","take my money","怎么买","哪里买","在哪买","求链接","想买","下单"],
+    "PRICE": ["price","how much","cost","expensive","cheap","afford","多少钱","价格","贵","便宜"],
+    "MATERIAL": ["material","made of","wood","metal","plastic","cotton","leather","材质","材料","木","金属","塑料","棉","皮"],
+    "SIZE_FIT": ["size","fit","small","large","tight","loose","尺寸","尺码","大小","合适","太紧","太松"],
+    "AUTHENTICITY": ["real","authentic","fake","genuine","original","真的","正品","假的","仿"],
+    "DURABILITY": ["durable","break","broke","broken","last long","quality","耐用","容易坏","坏了","断","质量"],
+    "SHIPPING": ["shipping","delivery","ship to","arrive","运费","发货","配送","多久到","送到"],
+    "GIFT": ["gift","present","birthday","anniversary","送礼","礼物","生日","纪念日"],
+    "USE_CASE": ["use for","use it","work for","good for","适合","用来","场景","可以用"],
+    "COMPARISON": ["better than","vs","versus","compared","difference","哪个好","对比","区别","不如"],
+    "PRAISE": ["love it","love this","amazing","great","beautiful","perfect","好看","喜欢","太棒","不错","完美"],
+    "COMPLAINT": ["bad","terrible","hate","disappointed","poor quality","waste","太差","不好","失望","垃圾","踩雷"],
+    "OBJECTION": ["but","however","too expensive","won't","wouldn't","not sure","concern","但是","不过","担心","不确定","不会买","不值"]
+  }
+}

@@ -1,0 +1,34 @@
+# Local credentials
+config.json
+.env
+.env.*
+
+# Research runtime output / evidence
+/runs/
+/raw/
+/normalized/
+/media/
+/reports/
+scripts/social-research/
+verify_run*/
+
+# Databases and generated state
+*.sqlite
+*.sqlite3
+_run_state.json
+
+# Python cache / virtualenv
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Live provider validation output
+/live-validation-run/
+phase7-live*/

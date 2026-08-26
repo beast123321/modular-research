@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Modular Research Evidence-backed Synthesis Response",
+  "type": "object",
+  "required": ["schema_version", "analyzer", "insights", "hypotheses", "media_briefs"],
+  "properties": {"schema_version":{"const":"1.0"},"analyzer":{"type":"object"},"insights":{"type":"array"},"hypotheses":{"type":"array"},"media_briefs":{"type":"array"}}
+}
