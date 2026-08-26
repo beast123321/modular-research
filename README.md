@@ -21,9 +21,9 @@
 
 ## 发布状态
 
-当前已发布基线：`1.0.0`。当前 `phase9/douyin-video-intelligence` 分支候选版本：`1.1.0`。
+当前已发布基线：`1.1.0`。当前 `fix/douyin-planner-budget-v1.1.1` 分支候选版本：`1.1.1`。
 
-`1.1.0` 候选分支已实现抖音 Video Intelligence 与参考视频研究入口；最终是否进入 `main` 以该分支/PR 最新 CI 与人工验收为准。**当前开发环境仍未完成 TikHub Douyin App V3 的真实 Provider live validation**。Registry 中相关 App V3 endpoint 保持 `documented`，不得理解为 live-verified。
+`1.1.1` 是 Douyin Video Intelligence 的 Planner efficiency patch：保留候选发现能力，但把 statistics / Creator / VOC 等付费深挖限制在 shortlist，并让 `sample_size_overrides` 真正影响网络采样。最终是否进入 `main` 以该分支/PR 最新 CI 与人工验收为准。**当前开发环境仍未完成 TikHub Douyin App V3 的真实 Provider live validation**。Registry 中相关 App V3 endpoint 保持 `documented`，不得理解为 live-verified。
 
 ## 安装
 
@@ -203,6 +203,45 @@ REFERENCE_SEED (存在参考内容时)
 - Douyin Video Intelligence V1 **不包含 Ads Intelligence**；`ads_analysis` / `retention_analysis` 不会路由到该 Profile；
 - App V3 endpoint 目前是 documented contract，不冒充 live-verified。
 
+### 有界采样与成本
+
+`v1.1.1` 将“候选池”和“付费深挖样本”分开。Standard 默认值：
+
+```text
+candidate_limit=200
+statistics_video_limit=20
+creator_limit=6
+comment_video_limit=6
+comment_pages=3
+deep_analysis_limit=8
+```
+
+对**一个主题 + 一个可本地解析参考视频**的典型 Standard 请求，当前回归基线为：
+
+```text
+EXPECTED_REQUESTS=38
+MAX_REQUESTS=50
+MAX_COST_USD<=0.050
+```
+
+这是当前混合定价下的计划基线，不是 Provider 最终账单。增加 seed keywords 会增加搜索请求，因此每次真实执行仍应以当次 Plan 为准。
+
+Canonical request 可以覆盖网络采样：
+
+```json
+{
+  "sample_size_overrides": {
+    "candidate_limit": 40,
+    "statistics_video_limit": 20,
+    "creator_limit": 6,
+    "comment_video_limit": 6,
+    "comment_pages": 1
+  }
+}
+```
+
+`statistics_video_limit` 自动受 `candidate_limit` 封顶。例如 `candidate_limit=9`、`statistics_video_limit=20` 时，只会计划 9 条视频的 statistics enrichment，即最多 5 个 batch-of-two 请求。
+
 ## ResearchRequest
 
 机器契约：`references/schemas/research-request.schema.json`。
@@ -254,10 +293,10 @@ product_validation
 ## Quick / Standard / Deep
 
 - `quick`：快速验证，较小样本和较低 fan-out。
-- `standard`：默认研究深度。
-- `deep`：更多候选、Creator/VOC enrichment 与深挖，成本更高。
+- `standard`：默认研究深度；Douyin 使用 bounded paid enrichment，不再把整个候选池全部深挖。
+- `deep`：更多 statistics、Creator/VOC enrichment 与深挖，成本更高。
 
-精确请求上限由 Stage Planner 根据当前 `ResearchRequest` 动态生成，不写死在 `SKILL.md`。
+精确请求上限由 Stage Planner 根据当前 `ResearchRequest` 动态生成，不写死在 `SKILL.md`。如需精确控制 Douyin 网络样本，使用 `sample_size_overrides`。
 
 ## Video Creative Understanding
 
@@ -321,6 +360,7 @@ Raw Evidence 落盘前脱敏；Normalized/Derived 数据通过 `raw_evidence_id`
 GitHub Actions 在 Python `3.10 / 3.12 / 3.13` 上运行离线测试，不注入 TikHub Key，也不执行付费请求。
 
 ```bash
+PYTHONPATH=scripts python -m unittest scripts/test_phase9_budget.py
 PYTHONPATH=scripts python -m unittest scripts/test_phase9_cli.py
 PYTHONPATH=scripts python -m unittest scripts/test_phase9.py
 PYTHONPATH=scripts python -m unittest scripts/test_phase8.py

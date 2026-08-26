@@ -264,6 +264,21 @@ def _resolve_profile_data(request: ResearchRequest, profile: dict[str, Any] | No
     return profile, profiles
 
 
+def _sample_limit(request: ResearchRequest, key: str, default: int) -> int:
+    raw = request.sample_size_overrides.get(key)
+    if raw is None:
+        return int(default)
+    if isinstance(raw, bool):
+        raise ValueError(f"sample_size_overrides.{key} must be a positive integer")
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"sample_size_overrides.{key} must be a positive integer") from exc
+    if value < 1:
+        raise ValueError(f"sample_size_overrides.{key} must be a positive integer")
+    return value
+
+
 def _build_douyin_stage_plan(
     request: ResearchRequest,
     profile: dict[str, Any] | None = None,
@@ -278,10 +293,34 @@ def _build_douyin_stage_plan(
     provider = str(profile.get("default_provider") or "tikhub")
     generic_preset = _DEPTH[request.depth]
     profile_preset = dict((profile.get("depth_presets") or {}).get(request.depth) or {})
-    candidate_limit = int(profile_preset.get("candidate_limit") or generic_preset["candidate_limit"])
-    creator_limit = int(profile_preset.get("creator_limit") or generic_preset["creator_limit"])
-    comment_video_limit = int(profile_preset.get("comment_video_limit") or generic_preset["comment_video_limit"])
-    comment_pages = int(profile_preset.get("comment_pages") or generic_preset["comment_pages"])
+    candidate_limit = _sample_limit(
+        request,
+        "candidate_limit",
+        int(profile_preset.get("candidate_limit") or generic_preset["candidate_limit"]),
+    )
+    statistics_video_limit = min(
+        candidate_limit,
+        _sample_limit(
+            request,
+            "statistics_video_limit",
+            int(profile_preset.get("statistics_video_limit") or candidate_limit),
+        ),
+    )
+    creator_limit = _sample_limit(
+        request,
+        "creator_limit",
+        int(profile_preset.get("creator_limit") or generic_preset["creator_limit"]),
+    )
+    comment_video_limit = _sample_limit(
+        request,
+        "comment_video_limit",
+        int(profile_preset.get("comment_video_limit") or generic_preset["comment_video_limit"]),
+    )
+    comment_pages = _sample_limit(
+        request,
+        "comment_pages",
+        int(profile_preset.get("comment_pages") or generic_preset["comment_pages"]),
+    )
     keywords = _keyword_universe(request, generic_preset["keyword_limit"])
     goals = set(request.research_goals)
     days = int(request.time_range.get("days") or 90)
@@ -341,7 +380,7 @@ def _build_douyin_stage_plan(
                 {"max_cursor": 0, "count": 20, "sort_type": 0, "channel": "normal"},
                 {"max_cursor": 0, "count": 20, "sort_type": 1, "channel": "normal"},
             ]
-        stats_requests = ceil(candidate_limit / 2)
+        stats_requests = ceil(statistics_video_limit / 2)
         stages.append(PlanStage("CREATOR_CONTEXT", [
             _make_task(
                 reg, provider, "creator_posts_v3", platform="douyin",
@@ -355,7 +394,7 @@ def _build_douyin_stage_plan(
             ),
             _make_task(
                 reg, provider, "video_statistics_v3", platform="douyin",
-                mode="per_video_batch2", max_items=candidate_limit,
+                mode="per_video_batch2", max_items=statistics_video_limit,
                 expected_requests=stats_requests, max_requests=stats_requests,
                 dependencies=["REFERENCE_SEED", "ORGANIC_DISCOVERY"],
             ),
@@ -391,6 +430,7 @@ def _build_douyin_stage_plan(
         "成本按计划请求上限估算，不包含失败请求重试；TikHub 非 200 响应是否计费以 provider 当前规则为准。",
         f"Douyin search 将 time_range.days={days} 映射为 publish_time={publish_time}；搜索过滤粒度由 provider 支持的 1天/7天/半年档位决定。",
         "Douyin video_statistics_v3 每次最多批量 2 个 aweme_id，因此播放量 enrichment 按两条视频一组预算。",
+        f"Douyin 付费深挖采样上限：candidate_limit={candidate_limit}, statistics_video_limit={statistics_video_limit}, creator_limit={creator_limit}, comment_video_limit={comment_video_limit}, comment_pages={comment_pages}；可通过 sample_size_overrides 显式覆盖。",
         "直接包含 modal_id/aweme_id/video/<id> 的参考链接本地解析作品 ID，不产生 provider 解析请求；无法本地解析的分享短链才调用 share-url fallback。",
         "动态阶段实际请求数取决于上游能提取到的视频和作者标识，可能低于计划上限。",
     ]
