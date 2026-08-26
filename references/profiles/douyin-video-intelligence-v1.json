@@ -1,6 +1,6 @@
 {
   "id": "douyin-video-intelligence-v1",
-  "version": "1.0",
+  "version": "1.1",
   "platform": "douyin",
   "default_provider": "tikhub",
   "supported_goals": [
@@ -34,9 +34,9 @@
     "shop": false
   },
   "depth_presets": {
-    "quick": {"candidate_limit": 50, "creator_limit": 5, "comment_video_limit": 5, "comment_pages": 1, "deep_analysis_limit": 5},
-    "standard": {"candidate_limit": 200, "creator_limit": 20, "comment_video_limit": 20, "comment_pages": 3, "deep_analysis_limit": 15},
-    "deep": {"candidate_limit": 500, "creator_limit": 50, "comment_video_limit": 50, "comment_pages": 5, "deep_analysis_limit": 30}
+    "quick": {"candidate_limit": 50, "statistics_video_limit": 10, "creator_limit": 5, "comment_video_limit": 5, "comment_pages": 1, "deep_analysis_limit": 5},
+    "standard": {"candidate_limit": 200, "statistics_video_limit": 20, "creator_limit": 6, "comment_video_limit": 6, "comment_pages": 3, "deep_analysis_limit": 8},
+    "deep": {"candidate_limit": 500, "statistics_video_limit": 60, "creator_limit": 20, "comment_video_limit": 20, "comment_pages": 5, "deep_analysis_limit": 30}
   },
   "stages": [
     "REFERENCE_SEED",
