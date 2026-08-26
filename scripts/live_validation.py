@@ -496,7 +496,7 @@ def main() -> int:
             topic=args.topic,
             reference_aweme_id=args.reference_aweme_id,
         )
-        max_calls = 6 if args.max_calls is None else args.max_calls
+        max_calls = 6 if args.max_calls is None else max(0, min(6, args.max_calls))
     else:
         probes = build_default_probes(topic=args.topic, market=args.market)
         max_calls = 15 if args.max_calls is None else args.max_calls
