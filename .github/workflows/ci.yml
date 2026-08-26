@@ -24,6 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           for test_file in \
+            scripts/test_phase9.py \
             scripts/test_phase8.py \
             scripts/test_phase7.py \
             scripts/test_phase6.py \
