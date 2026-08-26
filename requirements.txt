@@ -1,0 +1,6 @@
+# Full local runtime / test dependencies. Core planning remains mostly stdlib-only.
+numpy>=1.26
+opencv-python-headless>=4.10
+Pillow>=10.0
+pytesseract>=0.3.13
+openpyxl>=3.1
