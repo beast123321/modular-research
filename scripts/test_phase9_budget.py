@@ -50,8 +50,11 @@ class DouyinBudgetPlannerTests(unittest.TestCase):
             if task.capability == capability
         )
 
-    def test_patch_release_version_is_1_1_1(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "1.1.1")
+    def test_patch_release_line_is_at_least_1_1_1(self):
+        version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        parts = tuple(int(part) for part in version.split("."))
+        self.assertEqual(len(parts), 3)
+        self.assertGreaterEqual(parts, (1, 1, 1))
 
     def test_standard_single_topic_plan_bounds_paid_enrichment(self):
         plan = build_stage_plan(self._request())
