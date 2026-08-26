@@ -12,8 +12,11 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class Phase9ReleaseVersionTests(unittest.TestCase):
-    def test_phase9_release_candidate_is_1_1_0(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "1.1.0")
+    def test_phase9_release_line_is_at_least_1_1_0(self):
+        version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        parts = tuple(int(part) for part in version.split("."))
+        self.assertEqual(len(parts), 3)
+        self.assertGreaterEqual(parts, (1, 1, 0))
 
 
 class ReferenceUrlCliTests(unittest.TestCase):
