@@ -528,14 +528,49 @@ Raw/log 落盘前必须脱敏。视频下载器必须拒绝 localhost、私网�
 
 独立入口：
 
-```bash
-python scripts/live_validation.py \
-  --topic "<runtime topic>" \
-  --market US \
-  --max-calls 12
+```text
+scripts/live_validation.py
 ```
 
-默认不联网。真实验证必须同时提供：
+默认是 **plan-only**：不联网，也不读取 API Key。
+
+### Douyin
+
+当需要在完整 ResearchRun 前验证 Douyin App V3 Provider contract 时，Agent 应先从用户参考链接通过 `reference_resolver.py` 本地解析 `aweme_id`；仍然不得要求普通用户手工提供 `aweme_id`。
+
+预览：
+
+```bash
+python scripts/live_validation.py \
+  --platform douyin \
+  --topic "<runtime topic>" \
+  --reference-aweme-id "<locally resolved aweme_id>"
+```
+
+Douyin 默认验证边界：
+
+```text
+call_ceiling=6
+estimated_max_cost_usd=0.006
+```
+
+初始 probes：
+
+```text
+video_detail_v3
+video_search
+```
+
+成功取得真实 detail/search response 后，最多在同一个 6-call ceiling 内动态扩展：
+
+```text
+video_statistics_v3
+video_comments_v3
+user_profile_v3
+creator_posts_v3
+```
+
+真实验证必须同时提供：
 
 ```text
 --execute
@@ -543,11 +578,34 @@ python scripts/live_validation.py \
 --max-budget-usd <hard ceiling>
 ```
 
+首次 Douyin 验证建议：
+
+```text
+--max-calls 6
+--max-budget-usd 0.01
+```
+
+`--max-budget-usd` 是金额闸门，不代表允许增加调用次数；`--max-calls` 仍是独立硬上限。
+
+### TikTok
+
+TikTok 兼容入口：
+
+```bash
+python scripts/live_validation.py \
+  --platform tiktok \
+  --topic "<runtime topic>" \
+  --market US \
+  --max-calls 12
+```
+
+真实 TikTok 验证同样必须显式加入 `--execute --yes --max-budget-usd <hard ceiling>`。
+
 DNS/transport failure 必须报告为 environment/transport failure，不得误报为 Provider contract failure。
 
-只有 `calls_attempted > 0` 且取得真实 Provider response 才可把 endpoint 标为 live-validated。
+只有 `calls_attempted > 0` 且取得真实 Provider response，才可把对应 endpoint 视为已取得 live-validation 证据；失败或未调用的 endpoint 不得升级状态。
 
-当前 Douyin App V3 Phase 9 contract 已完成离线 fixture/CI 验证，但在本项目当前执行环境中**尚未完成真实 TikHub Provider live validation**。
+当前 Douyin App V3 contract 已完成离线 fixture/CI 验证，但在真实 TikHub Provider 请求成功之前，Registry 中相关 endpoint 必须继续保持 `status=documented`，不得预先标记为 `live_verified`。
 
 ---
 
@@ -561,7 +619,7 @@ GitHub Actions 必须在 Python：
 3.13
 ```
 
-运行 Phase 9 → Phase 8 → ... → Foundation 与 Legacy regression，并执行：
+运行 Phase 10 → Phase 9 → Phase 8 → ... → Foundation 与 Legacy regression，并执行：
 
 ```text
 compileall

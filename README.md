@@ -21,9 +21,9 @@
 
 ## 发布状态
 
-当前已发布基线：`1.1.0`。当前 `fix/douyin-planner-budget-v1.1.1` 分支候选版本：`1.1.1`。
+当前 `main` 已发布基线：`1.1.1`。当前 `fix/douyin-live-validation-v1.1.2` 分支候选版本：`1.1.2`。
 
-`1.1.1` 是 Douyin Video Intelligence 的 Planner efficiency patch：保留候选发现能力，但把 statistics / Creator / VOC 等付费深挖限制在 shortlist，并让 `sample_size_overrides` 真正影响网络采样。最终是否进入 `main` 以该分支/PR 最新 CI 与人工验收为准。**当前开发环境仍未完成 TikHub Douyin App V3 的真实 Provider live validation**。Registry 中相关 App V3 endpoint 保持 `documented`，不得理解为 live-verified。
+`1.1.2` 为 Douyin Video Intelligence 增加 platform-aware 的小额 live-provider validation harness。它不会扩大标准 Research Plan；v1.1.1 的 bounded sampling 仍保持 `38 expected / 50 max` 典型基线。**在真实 TikHub Douyin App V3 请求成功之前，Registry 相关 endpoint 继续保持 `documented`，不得理解为 live-verified。**
 
 ## 安装
 
@@ -310,28 +310,56 @@ Skill 可提取视频探测信息、关键帧、OCR/Transcript Evidence，并生
 
 ## Bounded live validation
 
-TikHub live validation 是独立的小额 Provider Contract 验证，不是完整 ResearchRun。
+TikHub live validation 是独立的小额 Provider Contract 验证，不是完整 ResearchRun。默认只输出计划，不联网，也不要求 API Key。
 
-先预览：
+### Douyin：先预览
 
 ```bash
 python scripts/live_validation.py \
-  --topic "standing desk" \
-  --market US \
-  --max-calls 12 \
-  --max-budget-usd 0.012
+  --platform douyin \
+  --topic "职场高情商接话" \
+  --reference-aweme-id "7667541271225140069"
 ```
 
-确认后：
+默认：
+
+```text
+call_ceiling=6
+estimated_max_cost_usd=0.006
+initial_capabilities=video_detail_v3,video_search
+```
+
+真实 Douyin contract validation：
 
 ```bash
 python scripts/live_validation.py \
-  --topic "standing desk" \
-  --market US \
-  --max-calls 12 \
-  --max-budget-usd 0.012 \
+  --platform douyin \
+  --topic "职场高情商接话" \
+  --reference-aweme-id "7667541271225140069" \
+  --max-calls 6 \
+  --max-budget-usd 0.01 \
   --execute \
   --yes
+```
+
+成功的 detail/search 响应会在 6-call ceiling 内动态扩展 `video_statistics_v3`、`video_comments_v3`、`user_profile_v3`、`creator_posts_v3`。`$0.006` 是 provider-default 预算估算，不是最终账单。
+
+### TikTok
+
+```bash
+python scripts/live_validation.py \
+  --platform tiktok \
+  --topic "standing desk" \
+  --market US \
+  --max-calls 12
+```
+
+真实验证同样必须显式加入：
+
+```text
+--execute
+--yes
+--max-budget-usd <hard ceiling>
 ```
 
 DNS/transport failure 必须报告为 environment/transport failure；只有实际取得 Provider response 才能把 endpoint 标记为 live-validated。
@@ -360,6 +388,7 @@ Raw Evidence 落盘前脱敏；Normalized/Derived 数据通过 `raw_evidence_id`
 GitHub Actions 在 Python `3.10 / 3.12 / 3.13` 上运行离线测试，不注入 TikHub Key，也不执行付费请求。
 
 ```bash
+PYTHONPATH=scripts python -m unittest scripts/test_phase10_live_validation.py
 PYTHONPATH=scripts python -m unittest scripts/test_phase9_budget.py
 PYTHONPATH=scripts python -m unittest scripts/test_phase9_cli.py
 PYTHONPATH=scripts python -m unittest scripts/test_phase9.py
