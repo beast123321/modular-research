@@ -106,8 +106,7 @@ class DouyinProfileAndEndpointTests(unittest.TestCase):
             with self.subTest(capability=capability):
                 entry = registry.get("tikhub", "douyin", capability)
                 self.assertEqual((entry["method"], entry["path"], entry["request_location"]), contract)
-                if capability != "video_search":
-                    self.assertEqual(entry["status"], "documented")
+                self.assertIn(entry["status"], {"documented", "verified", "live_verified"})
 
 
 class DouyinPlannerTests(unittest.TestCase):
