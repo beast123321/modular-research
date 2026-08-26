@@ -68,9 +68,9 @@ Agent 应从当前请求构造 `ResearchRequest`。只有缺失信息会实质�
 - `sample_size_overrides`
 - `output_preferences`
 
-### 不得要求普通用户提供
+### 不得要求用户提供内部实现参数
 
-除非用户主动做底层调试，否则不得要求：
+对普通用户，除非其主动做底层调试，否则不得要求用户提供：
 
 - endpoint path；
 - pagination cursor；
