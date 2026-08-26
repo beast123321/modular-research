@@ -29,8 +29,9 @@ class DouyinLiveValidationTests(unittest.TestCase):
         self.assertEqual(probes[1].payload["cursor"], 0)
         self.assertEqual(probes[1].payload["search_id"], "")
 
-    def test_plan_only_cli_defaults_douyin_to_six_calls_without_api_key(self):
-        completed = subprocess.run(
+    @staticmethod
+    def _run_plan_only(*extra_args: str):
+        return subprocess.run(
             [
                 sys.executable,
                 str(ROOT / "scripts" / "live_validation.py"),
@@ -40,12 +41,16 @@ class DouyinLiveValidationTests(unittest.TestCase):
                 "douyin",
                 "--reference-aweme-id",
                 "7667541271225140069",
+                *extra_args,
             ],
             cwd=ROOT,
             capture_output=True,
             text=True,
             check=False,
         )
+
+    def test_plan_only_cli_defaults_douyin_to_six_calls_without_api_key(self):
+        completed = self._run_plan_only()
         self.assertEqual(completed.returncode, 0, completed.stderr)
         plan = json.loads(completed.stdout)
         self.assertEqual(plan["execution_status"], "PLAN_ONLY")
@@ -56,6 +61,13 @@ class DouyinLiveValidationTests(unittest.TestCase):
             plan["initial_capabilities"],
             ["video_detail_v3", "video_search"],
         )
+
+    def test_douyin_cli_never_expands_above_six_calls(self):
+        completed = self._run_plan_only("--max-calls", "99")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        plan = json.loads(completed.stdout)
+        self.assertEqual(plan["call_ceiling"], 6)
+        self.assertEqual(plan["estimated_max_cost_usd"], 0.006)
 
     def test_runner_accepts_platform_and_douyin_expands_to_six_contract_probes(self):
         parameters = inspect.signature(live_validation.LiveValidationRunner.run).parameters
