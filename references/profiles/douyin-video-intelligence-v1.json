@@ -19,11 +19,11 @@
   ],
   "required_capabilities": [
     "video_search",
-    "video_detail",
-    "video_comments",
-    "creator_posts",
-    "user_profile",
-    "video_statistics"
+    "video_detail_v3",
+    "video_comments_v3",
+    "creator_posts_v3",
+    "user_profile_v3",
+    "video_statistics_v3"
   ],
   "default_content_scope": {
     "organic": true,
