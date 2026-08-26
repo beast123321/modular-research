@@ -8,6 +8,7 @@ from endpoint_registry import EndpointRegistry
 from profile_resolver import resolve_profile
 from research_request import ResearchRequest
 from reference_resolver import resolve_reference_content
+from stage_planner import build_stage_plan
 
 
 class ReferenceInputTests(unittest.TestCase):
@@ -62,14 +63,9 @@ class ReferenceInputTests(unittest.TestCase):
 class DouyinProfileAndEndpointTests(unittest.TestCase):
     def test_creative_goals_route_to_douyin_video_intelligence(self):
         request = ResearchRequest.from_dict(
-            {
-                "topic": "职场高情商接话",
-                "platform": "douyin",
-                "research_goals": ["hooks", "creative_patterns", "voc"],
-            }
+            {"topic": "职场高情商接话", "platform": "douyin", "research_goals": ["hooks", "creative_patterns", "voc"]}
         )
-        resolution = resolve_profile(request)
-        self.assertEqual(resolution.profile_id, "douyin-video-intelligence-v1")
+        self.assertEqual(resolve_profile(request).profile_id, "douyin-video-intelligence-v1")
 
     def test_reference_content_promotes_douyin_video_intelligence(self):
         request = ResearchRequest.from_dict(
@@ -77,12 +73,7 @@ class DouyinProfileAndEndpointTests(unittest.TestCase):
                 "topic": "职场",
                 "platform": "douyin",
                 "research_goals": ["content_opportunities"],
-                "reference_content": [
-                    {
-                        "url": "https://www.douyin.com/video/7592116912205630761",
-                        "role": "style_reference",
-                    }
-                ],
+                "reference_content": [{"url": "https://www.douyin.com/video/7592116912205630761", "role": "style_reference"}],
             }
         )
         resolution = resolve_profile(request)
@@ -90,23 +81,11 @@ class DouyinProfileAndEndpointTests(unittest.TestCase):
         self.assertIn("REFERENCE_CONTENT", resolution.reason_codes)
 
     def test_lightweight_trend_only_request_preserves_topic_radar(self):
-        request = ResearchRequest.from_dict(
-            {
-                "topic": "职场",
-                "platform": "douyin",
-                "research_goals": ["trend_discovery"],
-            }
-        )
+        request = ResearchRequest.from_dict({"topic": "职场", "platform": "douyin", "research_goals": ["trend_discovery"]})
         self.assertEqual(resolve_profile(request).profile_id, "douyin-topic-radar-v1")
 
     def test_ads_goals_do_not_route_to_douyin_video_intelligence_v1(self):
-        request = ResearchRequest.from_dict(
-            {
-                "topic": "职场",
-                "platform": "douyin",
-                "research_goals": ["ads_analysis"],
-            }
-        )
+        request = ResearchRequest.from_dict({"topic": "职场", "platform": "douyin", "research_goals": ["ads_analysis"]})
         with self.assertRaises(ValueError):
             resolve_profile(request)
 
@@ -126,6 +105,78 @@ class DouyinProfileAndEndpointTests(unittest.TestCase):
                 entry = registry.get("tikhub", "douyin", capability)
                 self.assertEqual((entry["method"], entry["path"], entry["request_location"]), contract)
                 self.assertEqual(entry["status"], "documented")
+
+
+class DouyinPlannerTests(unittest.TestCase):
+    @staticmethod
+    def _request(*, reference_url=None, goals=None, depth="quick"):
+        payload = {
+            "topic": "职场高情商接话",
+            "platform": "douyin",
+            "research_goals": goals or ["hooks", "creator_analysis", "voc"],
+            "time_range": {"days": 90},
+            "seed_keywords": ["人情世故", "职场生存法则"],
+            "depth": depth,
+        }
+        if reference_url:
+            payload["reference_content"] = [{"url": reference_url, "role": "style_reference"}]
+        return ResearchRequest.from_dict(payload)
+
+    def test_direct_reference_builds_zero_resolution_reference_seed(self):
+        request = self._request(reference_url="https://www.douyin.com/jingxuan/search/x?modal_id=7667541271225140069&type=general")
+        plan = build_stage_plan(request)
+        self.assertEqual(plan.profile_id, "douyin-video-intelligence-v1")
+        names = [stage.name for stage in plan.stages]
+        self.assertEqual(names[0], "REFERENCE_SEED")
+        self.assertIn("ORGANIC_DISCOVERY", names)
+        self.assertIn("CREATOR_CONTEXT", names)
+        self.assertIn("VOC", names)
+        self.assertIn("VIDEO_UNDERSTANDING", names)
+        self.assertNotIn("ADS_DISCOVERY", names)
+        ref_stage = plan.stages[0]
+        detail = next(task for task in ref_stage.tasks if task.capability == "video_detail")
+        self.assertEqual(detail.static_calls, [{"aweme_id": "7667541271225140069"}])
+        self.assertFalse(any(task.capability == "video_detail_by_share_url" for task in ref_stage.tasks))
+
+    def test_short_share_reference_uses_provider_fallback(self):
+        plan = build_stage_plan(self._request(reference_url="https://v.douyin.com/e3x2fjE/"))
+        ref_stage = next(stage for stage in plan.stages if stage.name == "REFERENCE_SEED")
+        fallback = next(task for task in ref_stage.tasks if task.capability == "video_detail_by_share_url")
+        self.assertEqual(fallback.static_calls, [{"share_url": "https://v.douyin.com/e3x2fjE/"}])
+
+    def test_search_contract_uses_douyin_first_page_fields(self):
+        plan = build_stage_plan(self._request())
+        search = next(task for stage in plan.stages for task in stage.tasks if task.capability == "video_search")
+        self.assertEqual(search.method, "POST")
+        self.assertEqual(search.request_location, "json")
+        self.assertTrue(search.static_calls)
+        first = search.static_calls[0]
+        self.assertEqual(first["keyword"], "职场高情商接话")
+        self.assertEqual(first["cursor"], 0)
+        self.assertEqual(first["search_id"], "")
+        self.assertEqual(first["backtrace"], "")
+        self.assertEqual(first["content_type"], "1")
+        self.assertEqual(first["filter_duration"], "0")
+        self.assertIn(first["sort_type"], {"0", "1", "2"})
+        self.assertEqual(first["publish_time"], "180")
+
+    def test_metrics_enrichment_is_batch_two_and_comments_keep_count_twenty(self):
+        plan = build_stage_plan(self._request(depth="standard"))
+        stats = next(task for stage in plan.stages for task in stage.tasks if task.capability == "video_statistics")
+        comments = next(task for stage in plan.stages for task in stage.tasks if task.capability == "video_comments")
+        self.assertEqual(stats.mode, "per_video_batch2")
+        self.assertGreater(stats.max_items, 0)
+        self.assertEqual(comments.variants, [{"cursor": 0, "count": 20}])
+        self.assertEqual(comments.pages_per_item, 3)
+
+    def test_douyin_plan_never_contains_ads_stages(self):
+        plan = build_stage_plan(self._request(goals=["hooks", "creative_patterns", "voc"]))
+        names = [stage.name for stage in plan.stages]
+        self.assertNotIn("ADS_DISCOVERY", names)
+        self.assertNotIn("CREATIVE_ANALYSIS", names)
+        self.assertIn("PATTERN_MINING", names)
+        self.assertIn("HYPOTHESES", names)
+        self.assertIn("BRIEFS", names)
 
 
 if __name__ == "__main__":
