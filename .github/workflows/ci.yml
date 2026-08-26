@@ -21,16 +21,21 @@ jobs:
       - name: Run V2 and foundation unittest suite
         env:
           PYTHONPATH: scripts
-        run: >-
-          python -m unittest
-          scripts/test_phase8.py
-          scripts/test_phase7.py
-          scripts/test_phase6.py
-          scripts/test_phase5.py
-          scripts/test_phase4.py
-          scripts/test_phase3.py
-          scripts/test_phase2.py
-          scripts/test_foundation.py
+        run: |
+          set -euo pipefail
+          for test_file in \
+            scripts/test_phase8.py \
+            scripts/test_phase7.py \
+            scripts/test_phase6.py \
+            scripts/test_phase5.py \
+            scripts/test_phase4.py \
+            scripts/test_phase3.py \
+            scripts/test_phase2.py \
+            scripts/test_foundation.py
+          do
+            echo "=== RUN ${test_file} ==="
+            python -m unittest "${test_file}"
+          done
       - name: Run legacy regression suite
         run: python scripts/test_skill.py
       - name: Compile Python sources
