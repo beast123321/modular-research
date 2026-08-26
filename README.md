@@ -21,9 +21,20 @@
 
 ## 发布状态
 
-当前 `main` 已发布基线：`1.1.1`。当前 `fix/douyin-live-validation-v1.1.2` 分支候选版本：`1.1.2`。
+当前版本：`1.1.3`。
 
-`1.1.2` 为 Douyin Video Intelligence 增加 platform-aware 的小额 live-provider validation harness。它不会扩大标准 Research Plan；v1.1.1 的 bounded sampling 仍保持 `38 expected / 50 max` 典型基线。**在真实 TikHub Douyin App V3 请求成功之前，Registry 相关 endpoint 继续保持 `documented`，不得理解为 live-verified。**
+`1.1.3` 是 Douyin Provider Verification Metadata release。基于 2026-08-26 的一次受控真实 TikHub 验证，以下六个 capability 已取得真实 Provider response，验证结果为 `6 attempted / 6 succeeded / 0 failed`，且 normalizer 均通过，因此 Registry 状态升级为 `live_verified`：
+
+```text
+video_detail_v3
+video_search
+video_comments_v3
+user_profile_v3
+creator_posts_v3
+video_statistics_v3
+```
+
+`video_detail_by_share_url_v3` 未包含在该次真实验证中，继续保持 `documented`。验证计划的 `$0.006` 是 provider-default 预算估算，不是 endpoint 精确价格或最终账单。v1.1.1 引入的 bounded Standard sampling 保持不变：典型基线 `38 expected / 50 max`。
 
 ## 安装
 
@@ -201,7 +212,7 @@ REFERENCE_SEED (存在参考内容时)
 - App V3 评论请求保持 `count=20`；
 - Creator Posts 保持 provider documented count 上限；
 - Douyin Video Intelligence V1 **不包含 Ads Intelligence**；`ads_analysis` / `retention_analysis` 不会路由到该 Profile；
-- App V3 endpoint 目前是 documented contract，不冒充 live-verified。
+- `video_detail_v3`、`video_search`、`video_comments_v3`、`user_profile_v3`、`creator_posts_v3`、`video_statistics_v3` 已有真实 Provider + normalizer 验证证据；短链 share-url fallback 仍只是 documented contract。
 
 ### 有界采样与成本
 
@@ -344,6 +355,8 @@ python scripts/live_validation.py \
 
 成功的 detail/search 响应会在 6-call ceiling 内动态扩展 `video_statistics_v3`、`video_comments_v3`、`user_profile_v3`、`creator_posts_v3`。`$0.006` 是 provider-default 预算估算，不是最终账单。
 
+2026-08-26 的受控验收已使用该边界取得 `6/6` 成功真实响应并通过 normalizer。该事实只支持本次实际调用到的六个 capability；未调用的 endpoint 不得据此升级。
+
 ### TikTok
 
 ```bash
@@ -388,6 +401,7 @@ Raw Evidence 落盘前脱敏；Normalized/Derived 数据通过 `raw_evidence_id`
 GitHub Actions 在 Python `3.10 / 3.12 / 3.13` 上运行离线测试，不注入 TikHub Key，也不执行付费请求。
 
 ```bash
+PYTHONPATH=scripts python -m unittest scripts/test_phase11_provider_verification.py
 PYTHONPATH=scripts python -m unittest scripts/test_phase10_live_validation.py
 PYTHONPATH=scripts python -m unittest scripts/test_phase9_budget.py
 PYTHONPATH=scripts python -m unittest scripts/test_phase9_cli.py
