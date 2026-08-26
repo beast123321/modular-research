@@ -1,134 +1,119 @@
-# Modular Research v1.1.2 发布说明
+# Modular Research v1.1.3 发布说明
 
 ## 状态
 
-`v1.1.2` 是在 v1.1.1 Douyin bounded-planner 基线之上的 live-provider validation patch。目标不是扩大 ResearchRun，而是让 `scripts/live_validation.py` 能以正确的平台 contract 对 Douyin App V3 做受控、小额、可审计的真实 Provider 验证。
+`v1.1.3` 是 Douyin Provider Verification Metadata release。它不扩大 v1.1.1 的 bounded Research Planner，也不增加新的付费研究 fan-out；本次只把已经取得真实 Provider 证据的 capability 状态写回 Endpoint Registry，并建立可回归的证据门槛。
 
-本次改动：
+## 真实验证证据
 
-- `LiveValidationRunner.run()` 新增 platform-aware routing，默认仍保持 `platform=tiktok` 兼容；
-- Douyin 模式从 `references/endpoints.json` 的 `platform=douyin` capability 读取真实 method/path/request location；
-- Douyin 模式使用 `scripts/normalizers/douyin.py`，不再误用 TikTok normalizer；
-- 新增 `build_douyin_probes()`；
-- Douyin 初始 probe 只包含：
-  - `video_detail_v3`：已知参考作品；
-  - `video_search`：当前研究主题；
-- 成功响应后动态扩展：
-  - `video_statistics_v3`；
-  - `video_comments_v3`；
-  - `user_profile_v3`；
-  - `creator_posts_v3`；
-- 默认 Douyin live validation call ceiling 固定为 6；
-- CLI 新增 `--platform douyin` 与 `--reference-aweme-id`；
-- plan-only 不读取 API Key、不联网；
-- 真实执行继续要求 `--execute + --yes + --max-budget-usd`；
-- 新增 `scripts/test_phase10_live_validation.py` 并接入 Python 3.10 / 3.12 / 3.13 CI。
+2026-08-26 使用 v1.1.2 bounded live-validation harness 完成一次受控 Douyin/TikHub 验证：
 
-## Douyin 六接口验证链
+```text
+CALL_CEILING=6
+CALLS_ATTEMPTED=6
+CALLS_SUCCEEDED=6
+CALLS_FAILED=0
+ESTIMATED_MAX_COST_USD=0.006
+```
 
-推荐第一轮使用一个已本地解析的参考作品 ID：
+以下六个 capability 实际取得 Provider code 200，且响应通过 `scripts/normalizers/douyin.py`：
 
 ```text
 video_detail_v3
 video_search
-video_statistics_v3
 video_comments_v3
 user_profile_v3
 creator_posts_v3
+video_statistics_v3
 ```
 
-初始只发 detail + search。其余 capability 从真实响应中的 `aweme_id` / `sec_user_id` 动态得到，不要求用户手工提供 Creator ID。
-
-`video_statistics_v3` 最多把两个已发现作品 ID 合并为一个 `aweme_ids=id1,id2` 请求；comments 保持 Provider contract 的 `count=20`。
-
-## Plan-only
-
-不配置 TikHub Key 也可以先检查将要调用的范围：
-
-```bash
-python scripts/live_validation.py \
-  --platform douyin \
-  --topic "职场高情商接话" \
-  --reference-aweme-id "7667541271225140069"
-```
-
-默认应得到：
+Normalizer 在真实响应中分别产生了 video/snapshot/creator/comment 等非空 Evidence bundle；因此这六个 capability 的 Registry 状态升级为：
 
 ```text
-execution_status=PLAN_ONLY
-platform=douyin
-initial_capabilities=video_detail_v3,video_search
-call_ceiling=6
-estimated_max_cost_usd=0.006
+status=live_verified
+verified_at=2026-08-26
+verification_basis=real_provider_response
+validation_calls={attempted:6,succeeded:6,failed:0}
+normalizer_validation=PASS
 ```
 
-这里的 `$0.006` 使用当前 `provider_default=$0.001/successful request` 作为预算基线，不代表 Provider 最终账单或每个 endpoint 的精确单价。
+`video_detail_by_share_url_v3` 没有在该次真实验证中被调用，因此仍保持 `status=documented`。
 
-## 真实验证
+## Pricing boundary
 
-真实执行必须显式给出预算：
+本次 live-validation 报告中的 `$0.006` 是按 `provider_default=$0.001` 计算的预算估算，不是最终账单，也不能用于把 App V3 endpoint 的 `unit_price_usd` 升级为 endpoint 精确报价。
 
-```bash
-python scripts/live_validation.py \
-  --platform douyin \
-  --topic "职场高情商接话" \
-  --reference-aweme-id "7667541271225140069" \
-  --max-calls 6 \
-  --max-budget-usd 0.01 \
-  --execute \
-  --yes
-```
+因此：
 
-建议第一次真实验证把 hard budget 设为 `$0.01`，但 call ceiling 仍保持 6；预算不是扩大调用量的授权。
+- `video_detail_v3`
+- `video_comments_v3`
+- `user_profile_v3`
+- `creator_posts_v3`
+- `video_statistics_v3`
 
-## 兼容性
+继续保持 `unit_price_usd=null`，并由 `EndpointRegistry.get_pricing()` 返回 `price_source=provider_default`、`is_endpoint_exact=false`。
 
-必须继续保持：
+`video_search` 保留此前已经登记的 explicit `$0.001` contract；v1.1.3 没有根据 live-validation 估算修改其价格来源。
 
-- TikTok live-validation 默认行为兼容；
-- TikTok Video Intelligence planner/executor 行为不退化；
-- `douyin-topic-radar-v1` legacy Web contract 不退化；
-- v1.1.1 的 `38 expected / 50 max` Standard Douyin Research Plan 回归继续通过；
-- Douyin reference/profile/planner/executor/normalizer/CLI 回归继续通过；
-- Legacy Douyin CLI regression 继续通过；
-- Evidence/Analysis/Creative/Synthesis 语义不变。
+## Planner / Harness compatibility
 
-Douyin Video Intelligence V1 仍**不包含 Ads Intelligence**。
+保持不变：
 
-## Evidence boundary
-
-本 release candidate 的自动化验证只能证明：
-
-- Douyin live harness 使用正确的平台 registry 与 normalizer；
-- 六接口 fan-out、参数构造、6-call ceiling 与预算 gate 在离线 fixture 中成立；
-- DNS/transport failure 与 Provider non-200 response 会被区分；
-- Raw response 继续在落盘前脱敏；
-- GitHub Actions 不注入 TikHub Key，也不产生付费请求。
-
-在真实 TikHub 请求成功之前，仍不能声称 Douyin App V3 endpoint 已 `live_verified`。Registry 继续保持 `status=documented`；live validation 结果应作为后续 endpoint 状态升级的证据，而不是在代码合并时预先升级状态。
+- Douyin Standard 典型 Planner 基线：`38 expected / 50 max`；
+- 典型计划 max cost 约 `$0.050`，仍只是计划值；
+- Douyin live-validation hard call ceiling = 6；
+- live-validation plan-only 不联网、不读取 API Key；
+- 真实 live-validation 仍要求 `--execute + --yes + --max-budget-usd`；
+- `douyin-topic-radar-v1` legacy Web contract 不变；
+- TikTok Video Intelligence / live-validation 行为不变；
+- Douyin Video Intelligence V1 仍不包含 Ads Intelligence。
 
 ## TDD evidence
 
-第一轮 RED：
+### RED 1 — Provider status
 
-- GitHub Actions run #69 / `32944513310`
-- 失败原因精确为缺失 `build_douyin_probes` 与 Runner `platform` 参数。
+GitHub Actions run #83 / `32960204628`：
 
-第一轮 GREEN：
+- 新 Phase 11 pricing-boundary test 已 PASS；
+- 六个 capability 的 status 测试精确失败，因为 Registry 仍为 `documented/verified`，尚未 `live_verified`。
 
-- run #70 / `32944682992`
-- Python 3.10 / 3.12 / 3.13 全回归通过。
+### GREEN 1 — Registry metadata
 
-第二轮 RED：
+Registry 写入六个 `live_verified` 状态后，Phase 11 PASS。旧 Phase 9 测试随后暴露历史硬编码 `status=documented`，因此将 Phase 9 改为只守 method/path/request_location，并允许证据状态向前升级；Phase 11 负责精确状态。
 
-- run #72 / `32944880560`
-- Phase 10 probe/runner/CLI 三项 PASS；唯一失败是版本仍为 `1.1.1`。
+GitHub Actions run #85 / `32960479041`：
 
-第二轮 GREEN：
+```text
+Python 3.10=PASS
+Python 3.12=PASS
+Python 3.13=PASS
+Phase 11→Foundation=PASS
+Legacy regression=PASS
+Compileall=PASS
+Release audit=PASS
+Core environment=PASS
+```
 
-- run #73 / `32944939610`
-- `VERSION=1.1.2` 后全回归通过。
+### RED 2 — Release version
+
+GitHub Actions run #86 / `32960594398`：
+
+- Provider metadata 与 pricing-boundary tests PASS；
+- 唯一失败为 `VERSION=1.1.2`，而 Phase 11 要求 `1.1.3`。
+
+随后 `VERSION` 升级为 `1.1.3`，并将 Phase 10 的历史 release guard 改为 `>=1.1.2`；Phase 11 精确锁定 `1.1.3`。
+
+## Security / repository boundary
+
+本 release **不提交**：
+
+- TikHub API Key；
+- 本地 `config.json`；
+- 真实 raw Provider response；
+- live-validation 本地输出目录。
+
+CI 继续 offline，不注入 TikHub Key，也不产生付费请求。
 
 ## License
 
-当前仓库仍未声明许可证；本次 patch 不添加 MIT、Apache-2.0 或其他许可证。
+当前仓库仍未声明许可证；v1.1.3 不添加 MIT、Apache-2.0 或其他许可证。
