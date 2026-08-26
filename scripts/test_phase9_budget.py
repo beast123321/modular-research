@@ -2,10 +2,13 @@
 """Regression tests for bounded Douyin Video Intelligence sampling."""
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 
 from research_request import ResearchRequest
 from stage_planner import build_stage_plan
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 class DouyinBudgetPlannerTests(unittest.TestCase):
@@ -46,6 +49,9 @@ class DouyinBudgetPlannerTests(unittest.TestCase):
             for task in stage.tasks
             if task.capability == capability
         )
+
+    def test_patch_release_version_is_1_1_1(self):
+        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "1.1.1")
 
     def test_standard_single_topic_plan_bounds_paid_enrichment(self):
         plan = build_stage_plan(self._request())
