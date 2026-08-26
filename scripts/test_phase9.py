@@ -71,6 +71,24 @@ class DouyinProfileAndEndpointTests(unittest.TestCase):
         resolution = resolve_profile(request)
         self.assertEqual(resolution.profile_id, "douyin-video-intelligence-v1")
 
+    def test_reference_content_promotes_douyin_video_intelligence(self):
+        request = ResearchRequest.from_dict(
+            {
+                "topic": "职场",
+                "platform": "douyin",
+                "research_goals": ["content_opportunities"],
+                "reference_content": [
+                    {
+                        "url": "https://www.douyin.com/video/7592116912205630761",
+                        "role": "style_reference",
+                    }
+                ],
+            }
+        )
+        resolution = resolve_profile(request)
+        self.assertEqual(resolution.profile_id, "douyin-video-intelligence-v1")
+        self.assertIn("REFERENCE_CONTENT", resolution.reason_codes)
+
     def test_lightweight_trend_only_request_preserves_topic_radar(self):
         request = ResearchRequest.from_dict(
             {
