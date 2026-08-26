@@ -23,15 +23,27 @@ def load_research_request_from_args(args) -> ResearchRequest | None:
     platform = getattr(args, 'platform', None)
     market = getattr(args, 'market', None)
     goals = list(getattr(args, 'research_goal', None) or [])
+    reference_urls = list(getattr(args, 'reference_url', None) or [])
     depth = getattr(args, 'depth', 'standard') or 'standard'
-    convenience_used = bool(topic or platform or market or goals)
+    convenience_used = bool(topic or platform or market or goals or reference_urls)
     if request_path and convenience_used:
-        raise ValueError('cannot mix --request with --topic/--platform/--market/--research-goal')
+        raise ValueError('cannot mix --request with --topic/--platform/--market/--research-goal/--reference-url')
     if request_path:
         payload = json.loads(Path(request_path).read_text(encoding='utf-8'))
         return ResearchRequest.from_dict(payload)
     if convenience_used:
-        payload = {'topic': topic, 'platform': platform, 'market': market, 'research_goals': goals, 'depth': depth, 'user_goal_text': getattr(args, 'goal', None)}
+        payload = {
+            'topic': topic,
+            'platform': platform,
+            'market': market,
+            'research_goals': goals,
+            'depth': depth,
+            'user_goal_text': getattr(args, 'goal', None),
+            'reference_content': [
+                {'platform': platform, 'url': url, 'content_id': None, 'role': 'style_reference'}
+                for url in reference_urls
+            ],
+        }
         return ResearchRequest.from_dict(payload)
     return None
 
@@ -266,7 +278,7 @@ def _render_markdown(r:dict)->str:
     return '\n'.join(lines)
 
 def main()->int:
-    p=argparse.ArgumentParser(description='modular-research 流水线编排（SKILL 七步）'); p.add_argument('--goal',required=False,help='Legacy goal text; V2 requests use --request or structured convenience args');p.add_argument('--request',help='V2 ResearchRequest JSON path');p.add_argument('--topic',help='V2 research topic');p.add_argument('--platform',help='V2 platform, e.g. tiktok or douyin');p.add_argument('--market',help='V2 market/region, e.g. US, GB, CA');p.add_argument('--research-goal',action='append',default=[],help='V2 controlled research goal; repeat for multiple goals');p.add_argument('--depth',choices=['quick','standard','deep'],default='standard',help='V2 default sampling depth');p.add_argument('--keywords',nargs='*',default=[]);p.add_argument('--videos-per-keyword',type=int,default=10);p.add_argument('--accounts-to-profile',type=int,default=20);p.add_argument('--comment-videos',type=int,default=5,help='取前 N 个视频的评论');p.add_argument('--video-ids',nargs='*',default=[],help='免费路径：已知视频ID（跳过付费搜索）');p.add_argument('--angles',nargs='*',default=[],help='候选选题角度，用于计算选题空位');p.add_argument('--out',default=DEFAULT_OUT);g=p.add_mutually_exclusive_group(required=False);g.add_argument('--only-free',action='store_true',help='免费路径：用 --video-ids 已知ID，不触发付费搜索');g.add_argument('--with-search',action='store_true',help='付费全链路：先 video_search 发现视频池（需付费余额）');g.add_argument('--billboard',action='store_true',help='榜单发现：用低粉爆款榜直接发现视频（免关键词、免费额度）');p.add_argument('--demo',action='store_true',help='离线演练：叠加在以上模式上，用合成数据走完整编排 I/O（不联网不花钱）');p.add_argument('--billboard-type',default='billboard_low_fan',choices=['billboard_low_fan','billboard_hot_video','billboard_topic','billboard_challenge'],help='榜单类型（默认 billboard_low_fan 低粉爆款榜）');p.add_argument('--plan-only',action='store_true',help='只打印费用预览，不发任何请求');p.add_argument('--yes',action='store_true',help='显式确认：允许发起付费请求');p.add_argument('--max-budget-usd',type=float,default=None,help='V2 真实执行的硬预算上限；低于计划 max cost 时拒绝执行');p.add_argument('--download-media',action='store_true',help='V2 创意研究：显式允许下载 shortlist 视频并提取关键帧/OCR；默认仅准备分析请求');p.add_argument('--media-limit',type=int,default=None,help='V2 创意研究：覆盖 Profile 的媒体 shortlist 上限');p.add_argument('--base-url',default=core.DEFAULT_BASE_URL,help='API 域名，默认 api.tikhub.dev（国内加速）；海外用 https://api.tikhub.io');p.add_argument('--config',default=str(DEFAULT_CONFIG),help='密钥配置文件路径（JSON，含 api_key 字段）；默认 ../config.json');args=p.parse_args()
+    p=argparse.ArgumentParser(description='modular-research 流水线编排（SKILL 七步）'); p.add_argument('--goal',required=False,help='Legacy goal text; V2 requests use --request or structured convenience args');p.add_argument('--request',help='V2 ResearchRequest JSON path');p.add_argument('--topic',help='V2 research topic');p.add_argument('--platform',help='V2 platform, e.g. tiktok or douyin');p.add_argument('--market',help='V2 market/region, e.g. US, GB, CA');p.add_argument('--research-goal',action='append',default=[],help='V2 controlled research goal; repeat for multiple goals');p.add_argument('--reference-url',action='append',default=[],help='V2 reference content URL; repeat for multiple references');p.add_argument('--depth',choices=['quick','standard','deep'],default='standard',help='V2 default sampling depth');p.add_argument('--keywords',nargs='*',default=[]);p.add_argument('--videos-per-keyword',type=int,default=10);p.add_argument('--accounts-to-profile',type=int,default=20);p.add_argument('--comment-videos',type=int,default=5,help='取前 N 个视频的评论');p.add_argument('--video-ids',nargs='*',default=[],help='免费路径：已知视频ID（跳过付费搜索）');p.add_argument('--angles',nargs='*',default=[],help='候选选题角度，用于计算选题空位');p.add_argument('--out',default=DEFAULT_OUT);g=p.add_mutually_exclusive_group(required=False);g.add_argument('--only-free',action='store_true',help='免费路径：用 --video-ids 已知ID，不触发付费搜索');g.add_argument('--with-search',action='store_true',help='付费全链路：先 video_search 发现视频池（需付费余额）');g.add_argument('--billboard',action='store_true',help='榜单发现：用低粉爆款榜直接发现视频（免关键词、免费额度）');p.add_argument('--demo',action='store_true',help='离线演练：叠加在以上模式上，用合成数据走完整编排 I/O（不联网不花钱）');p.add_argument('--billboard-type',default='billboard_low_fan',choices=['billboard_low_fan','billboard_hot_video','billboard_topic','billboard_challenge'],help='榜单类型（默认 billboard_low_fan 低粉爆款榜）');p.add_argument('--plan-only',action='store_true',help='只打印费用预览，不发任何请求');p.add_argument('--yes',action='store_true',help='显式确认：允许发起付费请求');p.add_argument('--max-budget-usd',type=float,default=None,help='V2 真实执行的硬预算上限；低于计划 max cost 时拒绝执行');p.add_argument('--download-media',action='store_true',help='V2 创意研究：显式允许下载 shortlist 视频并提取关键帧/OCR；默认仅准备分析请求');p.add_argument('--media-limit',type=int,default=None,help='V2 创意研究：覆盖 Profile 的媒体 shortlist 上限');p.add_argument('--base-url',default=core.DEFAULT_BASE_URL,help='API 域名，默认 api.tikhub.dev（国内加速）；海外用 https://api.tikhub.io');p.add_argument('--config',default=str(DEFAULT_CONFIG),help='密钥配置文件路径（JSON，含 api_key 字段）；默认 ../config.json');args=p.parse_args()
     try:v2_request=load_research_request_from_args(args)
     except (ValueError,OSError,json.JSONDecodeError) as exc:print(f'ResearchRequest 无效: {exc}');return 2
     if v2_request is not None:
