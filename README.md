@@ -21,9 +21,9 @@
 
 ## 发布状态
 
-当前发布基线：`1.0.0`。
+当前已发布基线：`1.0.0`。当前 `phase9/douyin-video-intelligence` 分支候选版本：`1.1.0`。
 
-`phase9/douyin-video-intelligence` 分支正在准备下一次 feature release。该分支已完成抖音 Video Intelligence 离线实现与 GitHub Actions 多版本回归，但**当前开发环境仍未完成 TikHub Douyin App V3 的真实 Provider live validation**。Registry 中相关 App V3 endpoint 保持 `documented`，不得理解为 live-verified。
+`1.1.0` 候选分支已实现抖音 Video Intelligence 与参考视频研究入口；最终是否进入 `main` 以该分支/PR 最新 CI 与人工验收为准。**当前开发环境仍未完成 TikHub Douyin App V3 的真实 Provider live validation**。Registry 中相关 App V3 endpoint 保持 `documented`，不得理解为 live-verified。
 
 ## 安装
 
