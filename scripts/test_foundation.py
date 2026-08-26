@@ -1,8 +1,5 @@
-#!/usr/bin/env python3
 """Modular Research V2 Phase 1 foundation tests (stdlib unittest, offline)."""
-
 from __future__ import annotations
-
 import argparse
 import json
 import os
@@ -10,176 +7,274 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 
-
 class ResearchRequestTests(unittest.TestCase):
+
     def setUp(self):
         from research_request import ResearchRequest
         self.ResearchRequest = ResearchRequest
 
     def test_valid_request_round_trip(self):
-        data = {
-            "schema_version": "1.0",
-            "topic": "standing desk",
-            "platform": "tiktok",
-            "market": "US",
-            "language": "en",
-            "research_goals": ["creative_patterns", "voc"],
-            "time_range": {"days": 90},
-            "content_scope": {"organic": True, "ads": True, "comments": True},
-            "depth": "standard",
-            "outputs": ["evidence", "findings"],
-            "user_goal_text": "ç ”ç©µç¾å›½ TikTok standing desk è§†é¢‘",
-        }
+        data = {'schema_version': '1.0', 'topic': 'standing desk', 'platform': 'tiktok', 'market': 'US', 'language': 'en', 'research_goals': ['creative_patterns', 'voc'], 'time_range': {'days': 90}, 'content_scope': {'organic': True, 'ads': True, 'comments': True}, 'depth': 'standard', 'outputs': ['evidence', 'findings'], 'user_goal_text': 'ç ”ç©¶ç¾å›½ TikTok standing desk è§†é¢‘'}
         req = self.ResearchRequest.from_dict(data)
-        self.assertEqual(req.to_dict()["topic"], "standing desk")
-        self.assertEqual(req.to_dict()["research_goals"], ["creative_patterns", "voc"])
-        self.assertEqual(req.to_dict()["user_goal_text"], data["user_goal_text"])
+        self.assertEqual(req.to_dict()['topic'], 'standing desk')
+        self.assertEqual(req.to_dict()['research_goals'], ['creative_patterns', 'voc'])
+        self.assertEqual(req.to_dict()['user_goal_text'], data['user_goal_text'])
 
     def test_platform_is_normalized(self):
-        req = self.ResearchRequest.from_dict({
-            "topic": "desk", "platform": "TikTok", "market": "us",
-            "research_goals": ["hooks"],
-        })
-        self.assertEqual(req.platform, "tiktok")
-        self.assertEqual(req.market, "US")
+        req = self.ResearchRequest.from_dict({'topic': 'desk', 'platform': 'TikTok', 'market': 'us', 'research_goals': ['hooks']})
+        self.assertEqual(req.platform, 'tiktok')
+        self.assertEqual(req.market, 'US')
 
     def test_depth_defaults_to_standard(self):
-        req = self.ResearchRequest.from_dict({
-            "topic": "desk", "platform": "tiktok", "market": "US",
-            "research_goals": ["hooks"],
-        })
-        self.assertEqual(req.depth, "standard")
+        req = self.ResearchRequest.from_dict({'topic': 'desk', 'platform': 'tiktok', 'market': 'US', 'research_goals': ['hooks']})
+        self.assertEqual(req.depth, 'standard')
 
     def test_empty_topic_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "topic"):
-            self.ResearchRequest.from_dict({
-                "topic": " ", "platform": "tiktok", "market": "US",
-                "research_goals": ["hooks"],
-            })
+        with self.assertRaisesRegex(ValueError, 'topic'):
+            self.ResearchRequest.from_dict({'topic': ' ', 'platform': 'tiktok', 'market': 'US', 'research_goals': ['hooks']})
 
     def test_invalid_depth_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "depth"):
-            self.ResearchRequest.from_dict({
-                "topic": "desk", "platform": "tiktok", "market": "US",
-                "research_goals": ["hooks"], "depth": "huge",
-            })
+        with self.assertRaisesRegex(ValueError, 'depth'):
+            self.ResearchRequest.from_dict({'topic': 'desk', 'platform': 'tiktok', 'market': 'US', 'research_goals': ['hooks'], 'depth': 'huge'})
 
     def test_unknown_goal_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "research_goals"):
-            self.ResearchRequest.from_dict({
-                "topic": "desk", "platform": "tiktok", "market": "US",
-                "research_goals": ["make_me_viral"],
-            })
+        with self.assertRaisesRegex(ValueError, 'research_goals'):
+            self.ResearchRequest.from_dict({'topic': 'desk', 'platform': 'tiktok', 'market': 'US', 'research_goals': ['make_me_viral']})
 
     def test_tiktok_request_without_market_reports_material_missing(self):
-        req = self.ResearchRequest.from_dict({
-            "topic": "desk", "platform": "tiktok",
-            "research_goals": ["creative_patterns"],
-        })
-        self.assertIn("market", req.validate_material_fields())
+        req = self.ResearchRequest.from_dict({'topic': 'desk', 'platform': 'tiktok', 'research_goals': ['creative_patterns']})
+        self.assertIn('market', req.validate_material_fields())
 
     def test_douyin_topic_radar_does_not_require_market(self):
-        req = self.ResearchRequest.from_dict({
-            "topic": "å® ç‰©ç”¨å“", "platform": "douyin",
-            "research_goals": ["low_follower_breakouts"],
-        })
-        self.assertNotIn("market", req.validate_material_fields())
+        req = self.ResearchRequest.from_dict({'topic': 'å® ç‰©ç”¨å“', 'platform': 'douyin', 'research_goals': ['low_follower_breakouts']})
+        self.assertNotIn('market', req.validate_material_fields())
 
     def test_filters_and_optional_lists_round_trip(self):
-        req = self.ResearchRequest.from_dict({
-            "topic": "desk", "platform": "tiktok", "market": "GB",
-            "research_goals": ["creative_patterns"],
-            "audience": "remote workers",
-            "seed_keywords": ["standing desk", "desk setup"],
-            "competitors": ["brand-a"],
-            "video_filters": {
-                "content_types": ["ugc"],
-                "duration_sec": {"min": 5, "max": 30},
-                "creator_followers": {"min": None, "max": 50000},
-                "minimum_views": 10000,
-                "include_ads": True,
-                "include_organic": True,
-            },
-        })
+        req = self.ResearchRequest.from_dict({'topic': 'desk', 'platform': 'tiktok', 'market': 'GB', 'research_goals': ['creative_patterns'], 'audience': 'remote workers', 'seed_keywords': ['standing desk', 'desk setup'], 'competitors': ['brand-a'], 'video_filters': {'content_types': ['ugc'], 'duration_sec': {'min': 5, 'max': 30}, 'creator_followers': {'min': None, 'max': 50000}, 'minimum_views': 10000, 'include_ads': True, 'include_organic': True}})
         out = req.to_dict()
-        self.assertEqual(out["audience"], "remote workers")
-        self.assertEqual(out["video_filters"]["creator_followers"]["max"], 50000)
-        self.assertEqual(out["seed_keywords"], ["standing desk", "desk setup"])
+        self.assertEqual(out['audience'], 'remote workers')
+        self.assertEqual(out['video_filters']['creator_followers']['max'], 50000)
+        self.assertEqual(out['seed_keywords'], ['standing desk', 'desk setup'])
 
     def test_duplicate_goals_are_deduplicated_preserving_order(self):
-        req = self.ResearchRequest.from_dict({
-            "topic": "desk", "platform": "tiktok", "market": "US",
-            "research_goals": ["hooks", "voc", "hooks"],
-        })
-        self.assertEqual(req.research_goals, ["hooks", "voc"])
+        req = self.ResearchRequest.from_dict({'topic': 'desk', 'platform': 'tiktok', 'market': 'US', 'research_goals': ['hooks', 'voc', 'hooks']})
+        self.assertEqual(req.research_goals, ['hooks', 'voc'])
 
     def test_schema_version_defaults_to_1_0(self):
-        req = self.ResearchRequest.from_dict({
-            "topic": "desk", "platform": "tiktok", "market": "US",
-            "research_goals": ["hooks"],
-        })
-        self.assertEqual(req.schema_version, "1.0")
+        req = self.ResearchRequest.from_dict({'topic': 'desk', 'platform': 'tiktok', 'market': 'US', 'research_goals': ['hooks']})
+        self.assertEqual(req.schema_version, '1.0')
 
     def test_schema_file_exists_and_has_no_business_defaults(self):
-        path = ROOT / "references" / "schemas" / "research-request.schema.json"
-        obj = json.loads(path.read_text(encoding="utf-8"))
+        path = ROOT / 'references' / 'schemas' / 'research-request.schema.json'
+        obj = json.loads(path.read_text(encoding='utf-8'))
         text = json.dumps(obj, ensure_ascii=False).lower()
-        self.assertEqual(obj["title"], "Modular Research ResearchRequest")
-        self.assertNotIn("wood bead bracelet", text)
+        self.assertEqual(obj['title'], 'Modular Research ResearchRequest')
+        self.assertNotIn('wood bead bracelet', text)
         self.assertNotIn('"default": "us"', text)
 
-
 class ProfileResolutionTests(unittest.TestCase):
+
     def _request(self, **overrides):
         from research_request import ResearchRequest
-        data = {
-            "topic": "generic topic",
-            "platform": "tiktok",
-            "market": "CA",
-            "research_goals": ["creative_patterns"],
-        }
+        data = {'topic': 'generic topic', 'platform': 'tiktok', 'market': 'CA', 'research_goals': ['creative_patterns']}
         data.update(overrides)
         return ResearchRequest.from_dict(data)
 
     def test_profiles_load_from_canonical_directory(self):
         from profile_loader import load_profiles
         profiles = load_profiles()
-        self.assertIn("tiktok-video-intelligence-v1", profiles)
-        self.assertIn("douyin-topic-radar-v1", profiles)
+        self.assertIn('tiktok-video-intelligence-v1', profiles)
+        self.assertIn('douyin-topic-radar-v1', profiles)
 
     def test_tiktok_creative_goal_resolves_video_intelligence(self):
         from profile_resolver import resolve_profile
         result = resolve_profile(self._request())
-        self.assertEqual(result.profile_id, "tiktok-video-intelligence-v1")
-        self.assertIn("PLATFORM_TIKTOK", result.reason_codes)
+        self.assertEqual(result.profile_id, 'tiktok-video-intelligence-v1')
+        self.assertIn('PLATFORM_TIKTOK', result.reason_codes)
         self.assertGreaterEqual(result.confidence, 0.9)
 
     def test_tiktok_voc_goal_resolves_video_intelligence(self):
         from profile_resolver import resolve_profile
-        result = resolve_profile(self._request(research_goals=["voc"]))
-        self.assertEqual(result.profile_id, "tiktok-video-intelligence-v1")
-        self.assertIn("GOAL_VOC", result.reason_codes)
+        result = resolve_profile(self._request(research_goals=['voc']))
+        self.assertEqual(result.profile_id, 'tiktok-video-intelligence-v1')
+        self.assertIn('GOAL_VOC', result.reason_codes)
 
     def test_douyin_low_follower_resolves_topic_radar(self):
         from profile_resolver import resolve_profile
-        req = self._request(
-            platform="douyin", market=None,
-            research_goals=["low_follower_breakouts"],
-        )
+        req = self._request(platform='douyin', market=None, research_goals=['low_follower_breakouts'])
         result = resolve_profile(req)
-        self.assertEqual(result.profile_id, "douyin-topic-radar-v1")
-        self.assertIn("PLATFORM_DOUYIN", result.reason_codes)
+        self.assertEqual(result.profile_id, 'douyin-topic-radar-v1')
+        self.assertIn('PLATFORM_DOUYIN', result.reason_codes)
 
     def test_unknown_platform_has_no_silent_fallback(self):
         from profile_resolver import resolve_profile
-        req = self._request(platform="youtube")
-        with self.assertRaisesRegex(ValueError, "profile"):
+        req = self._request(platform='youtube')
+        with self.assertRaisesRegex(ValueError, 'profile'):
             resolve_profile(req)
 
     def test_profile_files_do_not_hardcode_topic_or_market(self):
-      ²È="24Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡•Ál‰µ•Ñ¡½‰t°€‰Pˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡•Ál‰Á…Ñ ‰t°€ˆ½…Á¤½ØÄ½‘½Õå¥¸½İ•ˆ½™•Ñ¡}½¹•}Ù¥‘•¼ˆ¤((€€€‘•˜Ñ•ÍÑ}É•¥ÍÑÉå}±½…‘Í}Ñ¥­Ñ½­}Ù¥‘•½}Í•…É ¡Í•±˜¤è(€€€€€€€™É½´•¹‘Á½¥¹Ñ}É•¥ÍÑÉä¥µÁ½ÉĞ¹‘Á½¥¹ÑI•¥ÍÑÉä(€€€€€€€•À€ô¹‘Á½¥¹ÑI•¥ÍÑÉä ¤¹•Ğ ‰Ñ¥­¡Õˆˆ°€‰Ñ¥­Ñ½¬ˆ°€‰Ù¥‘•½}Í•…É ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡•Ál‰µ•Ñ¡½‰t°€‰Pˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡•Ál‰Á…Ñ ‰t°€ˆ½…Á¤½ØÄ½Ñ¥­Ñ½¬½…ÁÀ½ØÌ½™•Ñ¡}Ù¥‘•½}Í•…É¡}É•ÍÕ±Ğˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡•Ál‰ÍÑ…ÑÕÌ‰t°€‰‘½Õµ•¹Ñ•ˆ¤((€€€‘•˜Ñ•ÍÑ}É•¥ÍÑÉå}±½…‘Í}Ñ¥­Ñ½­}É•…Ñ½É}Í•…É¡}¥¹Í¥¡ÑÌ¡Í•±˜¤è(€€€€€€€™É½´•¹‘Á½¥¹Ñ}É•¥ÍÑÉä¥µÁ½ÉĞ¹‘Á½¥¹ÑI•¥ÍÑÉä(€€€€€€€•À€ô¹‘Á½¥¹ÑI•¥ÍÑÉä ¤¹•Ğ ‰Ñ¥­¡Õˆˆ°€‰Ñ¥­Ñ½¬ˆ°€‰É•…Ñ½É}Í•…É¡}¥¹Í¥¡ÑÌˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡•Ál‰µ•Ñ¡½‰t°€‰Pˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰™•Ñ¡}É•…Ñ½É}Í•…É¡}¥¹Í¥¡ÑÌˆ°•Ál‰Á…Ñ ‰t¤((€€€‘•˜Ñ•ÍÑ}É•¥ÍÑÉå}±½…‘Í}Ñ¥­Ñ½­}…‘}­•å™É…µ•}µ•Ñ¡½‘}¥¹‘¥Ù¥‘Õ…±±ä¡Í•±˜¤è(€€€€€€€™É½´•¹‘Á½¥¹Ñ}É•¥ÍÑÉä¥µÁ½ÉĞ¹‘Á½¥¹ÑI•¥ÍÑÉä(€€€€€€€•À€ô¹‘Á½¥¹ÑI•¥ÍÑÉä ¤¹•Ğ ‰Ñ¥­¡Õˆˆ°€‰Ñ¥­Ñ½¬ˆ°€‰…‘}­•å™É…µ•}…¹…±åÍ¥Ìˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡•Ál‰µ•Ñ¡½‰t°€‰A=MPˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡•Ál‰É•ÅÕ•ÍÑ}±½…Ñ¥½¸‰t°€‰©Í½¸ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡•Ál‰Á…Ñ ‰t°€ˆ½…Á¤½ØÄ½Ñ¥­Ñ½¬½…‘Ì½•Ñ}…‘}­•å™É…µ•}…¹…±åÍ¥Ìˆ¤((€€€‘•˜Ñ•ÍÑ}É•¥ÍÑÉå}Õ¹­¹½İ¹}…Á…‰¥±¥Ñå}±¥ÍÑÍ}…Ù…¥±…‰±”¡Í•±˜¤è(€€€€€€€™É½´•¹‘Á½¥¹Ñ}É•¥ÍÑÉä¥µÁ½ÉĞ¹‘Á½¥¹ÑI•¥ÍÑÉä(€€€€€€€İ¥Ñ Í•±˜¹…ÍÍ•ÉÑI…¥Í•ÍI••à¡-•åÉÉ½È°€‹–ŞËšr$ˆ¤è(€€€€€€€€€€€¹‘Á½¥¹ÑI•¥ÍÑÉä ¤¹•Ğ ‰Ñ¥­¡Õˆˆ°€‰Ñ¥­Ñ½¬ˆ°€‰‘½•Í}¹½Ñ}•á¥ÍĞˆ¤((€€€‘•˜Ñ•ÍÑ}É•¥ÍÑÉå}…Á…‰¥±¥Ñå}±¥ÍÑ¥¹}¥Í}Í½ÉÑ•¡Í•±˜¤è(€€€€€€€™É½´•¹‘Á½¥¹Ñ}É•¥ÍÑÉä¥µÁ½ÉĞ¹‘Á½¥¹ÑI•¥ÍÑÉä(€€€€€€€…ÁÌ€ô¹‘Á½¥¹ÑI•¥ÍÑÉä ¤¹±¥ÍÑ}…Á…‰¥±¥Ñ¥•Ì ‰Ñ¥­¡Õˆˆ°€‰Ñ¥­Ñ½¬ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡…ÁÌ°Í½ÉÑ•¡…ÁÌ¤¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰Ù¥‘•½}µ•ÑÉ¥Ìˆ°…ÁÌ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰Ù¥‘•½}½µµ•¹ÑÌˆ°…ÁÌ¤((€€€‘•˜Ñ•ÍÑ}±•…å}Á±…¹¹•É}É•Í½±Ù•}•¹‘Á½¥¹Ñ}­••ÁÍ}‘•¥µ…±}ÁÉ¥”¡Í•±˜¤è(€€€€€€€™É½´‘•¥µ…°¥µÁ½ÉĞ•¥µ…°(€€€€€€€¥µÁ½ÉĞÉ•Í•…É¡}Á±…¹¹•È…ÌÁ±…¹¹•È(€€€€€€€•À€ôÁ±…¹¹•È¹É•Í½±Ù•}•¹‘Á½¥¹Ğ ‰Ñ¥­¡Õˆˆ°€‰‘½Õå¥¸ˆ°€‰Ù¥‘•½}‘•Ñ…¥°ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%Í%¹ÍÑ…¹”¡•Ál‰Õ¹¥Ñ}ÁÉ¥”‰t°•¥µ…°¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡•Ál‰Õ¹¥Ñ}ÁÉ¥”‰t°•¥µ…° ˆÀ¸ÀÀÄˆ¤¤((€€€‘•˜Ñ•ÍÑ}É•Í•…É¡}Á±…¹¹•É}¡…Í}¹½}•µ‰•‘‘•‘}É½ÕÑ¥¹}Ñ…‰±•}…ÕÑ¡½É¥Ñä¡Í•±˜¤è(€€€€€€€Ñ•áĞ€ô€¡I==P€¼€‰ÍÉ¥ÁÑÌˆ€¼€‰É•Í•…É¡}Á±…¹¹•È¹Áäˆ¤¹É•…‘}Ñ•áĞ¡•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ9½Ñ%¸ ‰I=UQ%9}Q	1è‘¥Ğ€ôˆ°Ñ•áĞ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰¹‘Á½¥¹ÑI•¥ÍÑÉäˆ°Ñ•áĞ¤(()±…ÍÌI•ÅÕ•ÍÑ±¥½µÁ…Ñ¥‰¥±¥ÑåQ•ÍÑÌ¡Õ¹¥ÑÑ•ÍĞ¹Q•ÍÑ…Í”¤è(€€€‘•˜}…ÉÌ¡Í•±˜°€¨©½Ù•ÉÉ¥‘•Ì¤è(€€€€€€€‰…Í”€ô‘¥Ğ (€€€€€€€€€€€É•ÅÕ•ÍĞõ9½¹”°Ñ½Á¥Œõ9½¹”°Á±…Ñ™½É´õ9½¹”°µ…É­•Ğõ9½¹”°(€€€€€€€€€€€É•Í•…É¡}½…°õmt°‘•ÁÑ ô‰ÍÑ…¹‘…Éˆ°½…°õ9½¹”°(€€€€€€€€¤(€€€€€€€‰…Í”¹ÕÁ‘…Ñ”¡½Ù•ÉÉ¥‘•Ì¤(€€€€€€€É•ÑÕÉ¸…ÉÁ…ÉÍ”¹9…µ•ÍÁ…” ¨©‰…Í”¤((€€€‘•˜Ñ•ÍÑ}±½…‘}É•ÅÕ•ÍÑ}©Í½¸¡Í•±˜¤è(€€€€€€€¥µÁ½ÉĞÉÕ¹}É•Í•…É (€€€€€€€İ¥Ñ Ñ•µÁ™¥±”¹Q•µÁ½É…Éå¥É•Ñ½Éä ¤…ÌÑè(€€€€€€€€€€€Á…Ñ €ôA…Ñ ¡Ñ¤€¼€‰É•ÅÕ•ÍĞ¹©Í½¸ˆ(€€€€€€€€€€€Á…Ñ ¹İÉ¥Ñ•}Ñ•áĞ¡©Í½¸¹‘ÕµÁÌ¡ì(€€€€€€€€€€€€€€€€‰Ñ½Á¥Œˆè€‰½™™•”µ…¡¥¹”ˆ°(€€€€€€€€€€€€€€€€‰Á±…Ñ™½É´ˆè€‰Ñ¥­Ñ½¬ˆ°(€€€€€€€€€€€€€€€€‰µ…É­•Ğˆè€‰ˆ°(€€€€€€€€€€€€€€€€‰É•Í•…É¡}½…±Ìˆèl‰Ù½Œ‰t(€€€€€€€€€€€ô¤°•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€€€€€€€€€É•Ä€ôÉÕ¹}É•Í•…É ¹±½…‘}É•Í•…É¡}É•ÅÕ•ÍÑ}™É½µ}…ÉÌ¡Í•±˜¹}…ÉÌ¡É•ÅÕ•ÍĞõÍÑÈ¡Á…Ñ ¤¤¤(€€€€€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•Ä¹Ñ½Á¥Œ°€‰½™™•”µ…¡¥¹”ˆ¤(€€€€€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•Ä¹µ…É­•Ğ°€‰ˆ¤((€€€‘•˜Ñ•ÍÑ}±½…‘}½¹Ù•¹¥•¹•}…ÉÌ¡Í•±˜¤è(€€€€€€€¥µÁ½ÉĞÉÕ¹}É•Í•…É (€€€€€€€É•Ä€ôÉÕ¹}É•Í•…É ¹±½…‘}É•Í•…É¡}É•ÅÕ•ÍÑ}™É½µ}…ÉÌ¡Í•±˜¹}…ÉÌ (€€€€€€€€€€€Ñ½Á¥Œô‰ÍÑ…¹‘¥¹œ‘•Í¬ˆ°Á±…Ñ™½É´ô‰Q¥­Q½¬ˆ°µ…É­•Ğô‰ÕÌˆ°(€€€€€€€€€€€É•Í•…É¡}½…°õl‰¡½½­Ìˆ°€‰Ù½Œ‰t°‘•ÁÑ ô‰‘••Àˆ°(€€€€€€€€¤¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•Ä¹Á±…Ñ™½É´°€‰Ñ¥­Ñ½¬ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•Ä¹É•Í•…É¡}½…±Ì°l‰¡½½­Ìˆ°€‰Ù½Œ‰t¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•Ä¹‘•ÁÑ °€‰‘••Àˆ¤((€€€‘•˜Ñ•ÍÑ}±•…å}½…±}İ¥Ñ¡½ÕÑ}¹•İ}É•ÅÕ•ÍÑ}É•ÑÕÉ¹Í}¹½¹”¡Í•±˜¤è(€€€€€€€¥µÁ½ÉĞÉÕ¹}É•Í•…É (€€€€€€€É•Ä€ôÉÕ¹}É•Í•…É ¹±½…‘}É•Í•…É¡}É•ÅÕ•ÍÑ}™É½µ}…ÉÌ¡Í•±˜¹}…ÉÌ¡½…°ô‹š^œ½Õå¥¸ƒ¢Â‚Pˆ¤¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%Í9½¹”¡É•Ä¤((€€€‘•˜Ñ•ÍÑ}É•ÅÕ•ÍÑ}™¥±•}…¹‘}½¹Ù•¹¥•¹•}…ÉÍ}…¹¹½Ñ}‰•}µ¥á•¡Í•±˜¤è(€€€€€€€¥µÁ½ÉĞÉÕ¹}É•Í•…É (€€€€€€€İ¥Ñ Ñ•µÁ™¥±”¹Q•µÁ½É…Éå¥É•Ñ½Éä ¤…ÌÑè(€€€€€€€€€€€Á…Ñ €ôA…Ñ ¡Ñ¤€¼€‰É•ÅÕ•ÍĞ¹©Í½¸ˆ(€€€€€€€€€€€Á…Ñ ¹İÉ¥Ñ•}Ñ•áĞ¡©Í½¸¹‘ÕµÁÌ¡ì(€€€€€€€€€€€€€€€€‰Ñ½Á¥Œˆè€‰àˆ°€‰Á±…Ñ™½É´ˆè€‰Ñ¥­Ñ½¬ˆ°€‰µ…É­•Ğˆè€‰ULˆ°(€€€€€€€€€€€€€€€€‰É•Í•…É¡}½…±Ìˆèl‰¡½½­Ì‰t(€€€€€€€€€€€ô¤°•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€€€€€€€€€İ¥Ñ Í•±˜¹…ÍÍ•ÉÑI…¥Í•ÍI••à¡Y…±Õ•ÉÉ½È°€‰…¹¹½Ğµ¥àˆ¤è(€€€€€€€€€€€€€€€ÉÕ¹}É•Í•…É ¹±½…‘}É•Í•…É¡}É•ÅÕ•ÍÑ}™É½µ}…ÉÌ¡Í•±˜¹}…ÉÌ (€€€€€€€€€€€€€€€€€€€É•ÅÕ•ÍĞõÍÑÈ¡Á…Ñ ¤°Ñ½Á¥Œô‰½Ñ¡•Èˆ°(€€€€€€€€€€€€€€€€¤¤((€€€‘•˜Ñ•ÍÑ}¹•İ}É•ÅÕ•ÍÑ}Á…ÉÍ•É}‘½•Í}¹½Ñ}É•ÅÕ¥É•}¥¹Ñ•É¹…±}ÁÉ½™¥±•}½É}•¹‘Á½¥¹Ğ¡Í•±˜¤è(€€€€€€€Ñ•áĞ€ô€¡I==P€¼€‰ÍÉ¥ÁÑÌˆ€¼€‰ÉÕ¹}É•Í•…É ¹Áäˆ¤¹É•…‘}Ñ•áĞ¡•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ œ´µÉ•ÅÕ•ÍĞœ°Ñ•áĞ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ œ´µÉ•Í•…É µ½…°œ°Ñ•áĞ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ9½Ñ%¸ œ´µÁÉ½™¥±”œ°Ñ•áĞ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ9½Ñ%¸ œ´µ•¹‘Á½¥¹Ğœ°Ñ•áĞ¤((€€€‘•˜Ñ•ÍÑ}¹•İ}É•ÅÕ•ÍÑ}É•ÅÕ¥É•Í}Á±…¹}½¹±å}¥¹}Á¡…Í”Ä¡Í•±˜¤è(€€€€€€€¥µÁ½ÉĞÉÕ¹}É•Í•…É (€€€€€€€É•Ä€ôÉÕ¹}É•Í•…É ¹±½…‘}É•Í•…É¡}É•ÅÕ•ÍÑ}™É½µ}…ÉÌ¡Í•±˜¹}…ÉÌ (€€€€€€€€€€€Ñ½Á¥Œô‰‘•Í¬ˆ°Á±…Ñ™½É´ô‰Ñ¥­Ñ½¬ˆ°µ…É­•Ğô‰ULˆ°É•Í•…É¡}½…°õl‰¡½½­Ì‰t(€€€€€€€€¤¤(€€€€€€€É•ÍÕ±Ğ€ôÉÕ¹}É•Í•…É ¹‰Õ¥±‘}¥¹Ñ…­•}Á±…¸ ¡É•Ä¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•ÍÕ±Ñl‰ÁÉ½™¥±”‰ul‰ÁÉ½™¥±•}¥‰t°€‰Ñ¥­Ñ½¬µÙ¥‘•¼µ¥¹Ñ•±±¥•¹”µØÄˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•ÍÕ±Ñl‰•á•ÕÑ¥½¹}ÍÑ…ÑÕÌ‰t°€‰A19}=91e}=U9Q%=8ˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑÅÕ…°¡É•ÍÕ±Ñl‰µ¥ÍÍ¥¹}µ…Ñ•É¥…±}™¥•±‘Ì‰t°mt¤(()±…ÍÌA½ÉÑ…‰¥±¥Ñå¹‘½ÍQ•ÍÑÌ¡Õ¹¥ÑÑ•ÍĞ¹Q•ÍÑ…Í”¤è(€€€‘•˜Ñ•ÍÑ}™½Õ¹‘…Ñ¥½¹}µ½‘Õ±•Í}¡…Ù•}¹½}¡½ÍÑ}ÁÉ½©•Ñ}¥µÁ½ÉÑÌ¡Í•±˜¤è(€€€€€€€¹…µ•Ì€ôl(€€€€€€€€€€€€‰É•Í•…É¡}É•ÅÕ•ÍĞ¹Áäˆ°€‰ÁÉ½™¥±•}±½…‘•È¹Áäˆ°€‰ÁÉ½™¥±•}É•Í½±Ù•È¹Áäˆ°(€€€€€€€€€€€€‰•¹‘Á½¥¹Ñ}É•¥ÍÑÉä¹Áäˆ°€‰É•Í•…É¡}Á±…¹¹•È¹Áäˆ°(€€€€€€€t(€€€€€€€Ñ•áĞ€ô€‰q¸ˆ¹©½¥¸ ¡I==P€¼€‰ÍÉ¥ÁÑÌˆ€¼¹…µ”¤¹É•…‘}Ñ•áĞ¡•¹½‘¥¹œô‰ÕÑ˜´àˆ¤™½È¹…µ”¥¸¹…µ•Ì¤¹±½İ•È ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ9½Ñ%¸ ‰¥µÁ½ÉĞ¡¼ˆ°Ñ•áĞ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ9½Ñ%¸ ‰¥µÁ½ÉĞ¡•Éµ•Ìˆ°Ñ•áĞ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ9½Ñ%¸ ‰¥µÁ½ÉĞÍ¡½Á¥™äˆ°Ñ•áĞ¤((€€€‘•˜Ñ•ÍÑ}¥Ñ¥¹½É•}•á±Õ‘•Í}Á±…¥¹Ñ•áÑ}½¹™¥}…¹‘}ÉÕ¹Ñ¥µ•}½ÕÑÁÕÑÌ¡Í•±˜¤è(€€€€€€€Ñ•áĞ€ô€¡I==P€¼€ˆ¹¥Ñ¥¹½É”ˆ¤¹É•…‘}Ñ•áĞ¡•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰½¹™¥œ¹©Í½¸ˆ°Ñ•áĞ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰}}Áå…¡•}|¼ˆ°Ñ•áĞ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰Í½¥…°µÉ•Í•…É ¼ˆ°Ñ•áĞ¤((€€€‘•˜Ñ•ÍÑ}Í­¥±±}‘•™¥¹•Í}ÉÕ¹Ñ¥µ•}¥¹Ñ…­•}¹½Ñ}™¥á•‘}‰ÕÍ¥¹•ÍÍ}É•ÅÕ•ÍĞ¡Í•±˜¤è(€€€€€€€Ñ•áĞ€ô€¡I==P€¼€‰M-%10¹µˆ¤¹É•…‘}Ñ•áĞ¡•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€€€€€±½İ•É•€ôÑ•áĞ¹±½İ•È ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰É•Í•…É¡É•ÅÕ•ÍĞˆ°±½İ•É•¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰É•Í•…É ¥¹Ñ…­”ˆ°±½İ•É•¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰ÁÉ½™¥±”É•Í½±Ù•Èˆ°±½İ•É•¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ9½Ñ%¸‹’ú,ëšÆ&šv¿–.oœîs–.g–êPˆ°±½İ•É•¤((€€€‘•˜Ñ•ÍÑ}Í­¥±±}Í…åÍ}ÕÍ•É}¹••‘}¹½Ñ}ÁÉ½Ù¥‘•}¥¹Ñ•É¹…±}ÁÉ½™¥±•}½É}•¹‘Á½¥¹Ğ¡Í•±˜¤è(€€€€€€€Ñ•áĞ€ô€¡I==P€¼€‰M-%10¹µˆ¤¹É•…‘}Ñ•áĞ¡•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‹’â7–ú_¢ššÆR£š"ßš>C’úlˆ°Ñ•áĞ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰•¹‘Á½¥¹Ğˆ°Ñ•áĞ¹±½İ•È ¤¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰ÁÉ½™¥±”ˆ°Ñ•áĞ¹±½İ•È ¤¤((€€€‘•˜Ñ•ÍÑ}É½ÕÑ¥¹}Ñ…‰±•}µ…É­Í}•¹‘Á½¥¹ÑÍ}©Í½¹}…Í}µ…¡¥¹•}…ÕÑ¡½É¥Ñä¡Í•±˜¤è(€€€€€€€Ñ•áĞ€ô€¡I==P€¼€‰É•™•É•¹•Ìˆ€¼€‰É½ÕÑ¥¹œµÑ…‰±”¹µˆ¤¹É•…‘}Ñ•áĞ¡•¹½‘¥¹œô‰ÕÑ˜´àˆ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‰•¹‘Á½¥¹ÑÌ¹©Í½¸ˆ°Ñ•áĞ¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ%¸ ‹–R¿’âšrë–f£šv–¢ˆ°Ñ•áĞ¤((€€€‘•˜Ñ•ÍÑ}‘¥ÍÑÉ¥‰ÕÑ•‘}ÁÉ½™¥±•Í}½¹Ñ…¥¹}¹½}…Á¥}­•ä¡Í•±˜¤è(€€€€€€€Ñ•áĞ€ô€‰q¸ˆ¹©½¥¸¡À¹É•…‘}Ñ•áĞ¡•¹½‘¥¹œô‰ÕÑ˜´àˆ¤™½ÈÀ¥¸€¡I==P€¼€‰É•™•É•¹•Ìˆ€¼€‰ÁÉ½™¥±•Ìˆ¤¹±½ˆ ˆ¨¹©Í½¸ˆ¤¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ9½Ñ%¸ ‰…Á¥}­•äˆ°Ñ•áĞ¹±½İ•È ¤¤(€€€€€€€Í•±˜¹…ÍÍ•ÉÑ9½Ñ%¸ ‰‰•…É•È€ˆ°Ñ•áĞ¹±½İ•È ¤¤(()¥˜}}¹…µ•}|€ôô€‰}}µ…¥¹}|ˆè(€€€Õ¹¥ÑÑ•ÍĞ¹µ…¥¸ ¤(
+        profile_dir = ROOT / 'references' / 'profiles'
+        texts = '\n'.join((p.read_text(encoding='utf-8') for p in profile_dir.glob('*.json')))
+        lowered = texts.lower()
+        self.assertNotIn('wood bead bracelet', lowered)
+        self.assertNotIn('"market": "us"', lowered)
+        self.assertNotIn('"topic":', lowered)
+
+    def test_profile_loader_rejects_duplicate_profile_ids(self):
+        from profile_loader import load_profiles
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            profile = {'id': 'same', 'version': '1.0', 'platform': 'tiktok', 'default_provider': 'tikhub', 'supported_goals': ['hooks'], 'required_capabilities': [], 'default_content_scope': {}, 'depth_presets': {}, 'stages': [], 'analysis_modules': [], 'output_contracts': []}
+            (d / 'a.json').write_text(json.dumps(profile), encoding='utf-8')
+            (d / 'b.json').write_text(json.dumps(profile), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'duplicate'):
+                load_profiles(d)
+
+class EndpointRegistryTests(unittest.TestCase):
+
+    def test_registry_loads_legacy_douyin_endpoint(self):
+        from endpoint_registry import EndpointRegistry
+        reg = EndpointRegistry()
+        ep = reg.get('tikhub', 'douyin', 'video_detail')
+        self.assertEqual(ep['method'], 'GET')
+        self.assertEqual(ep['path'], '/api/v1/douyin/web/fetch_one_video')
+
+    def test_registry_loads_tiktok_video_search(self):
+        from endpoint_registry import EndpointRegistry
+        ep = EndpointRegistry().get('tikhub', 'tiktok', 'video_search')
+        self.assertEqual(ep['method'], 'GET')
+        self.assertEqual(ep['path'], '/api/v1/tiktok/app/v3/fetch_video_search_result')
+        self.assertEqual(ep['status'], 'documented')
+
+    def test_registry_loads_tiktok_creator_search_insights(self):
+        from endpoint_registry import EndpointRegistry
+        ep = EndpointRegistry().get('tikhub', 'tiktok', 'creator_search_insights')
+        self.assertEqual(ep['method'], 'GET')
+        self.assertIn('fetch_creator_search_insights', ep['path'])
+
+    def test_registry_loads_tiktok_ad_keyframe_method_individually(self):
+        from endpoint_registry import EndpointRegistry
+        ep = EndpointRegistry().get('tikhub', 'tiktok', 'ad_keyframe_analysis')
+        self.assertEqual(ep['method'], 'POST')
+        self.assertEqual(ep['request_location'], 'json')
+        self.assertEqual(ep['path'], '/api/v1/tiktok/ads/get_ad_keyframe_analysis')
+
+    def test_registry_unknown_capability_lists_available(self):
+        from endpoint_registry import EndpointRegistry
+        with self.assertRaisesRegex(KeyError, 'å·²æœ‰'):
+            EndpointRegistry().get('tikhub', 'tiktok', 'does_not_exist')
+
+    def test_registry_capability_listing_is_sorted(self):
+        from endpoint_registry import EndpointRegistry
+        caps = EndpointRegistry().list_capabilities('tikhub', 'tiktok')
+        self.assertEqual(caps, sorted(caps))
+        self.assertIn('video_metrics', caps)
+        self.assertIn('video_comments', caps)
+
+    def test_legacy_planner_resolve_endpoint_keeps_decimal_price(self):
+        from decimal import Decimal
+        import research_planner as planner
+        ep = planner.resolve_endpoint('tikhub', 'douyin', 'video_detail')
+        self.assertIsInstance(ep['unit_price'], Decimal)
+        self.assertEqual(ep['unit_price'], Decimal('0.001'))
+
+    def test_research_planner_has_no_embedded_routing_table_authority(self):
+        text = (ROOT / 'scripts' / 'research_planner.py').read_text(encoding='utf-8')
+        self.assertNotIn('ROUTING_TABLE: dict =', text)
+        self.assertIn('EndpointRegistry', text)
+
+class RequestCliCompatibilityTests(unittest.TestCase):
+
+    def _args(self, **overrides):
+        base = dict(request=None, topic=None, platform=None, market=None, research_goal=[], depth='standard', goal=None)
+        base.update(overrides)
+        return argparse.Namespace(**base)
+
+    def test_load_request_json(self):
+        import run_research
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / 'request.json'
+            path.write_text(json.dumps({'topic': 'coffee machine', 'platform': 'tiktok', 'market': 'GB', 'research_goals': ['voc']}), encoding='utf-8')
+            req = run_research.load_research_request_from_args(self._args(request=str(path)))
+            self.assertEqual(req.topic, 'coffee machine')
+            self.assertEqual(req.market, 'GB')
+
+    def test_load_convenience_args(self):
+        import run_research
+        req = run_research.load_research_request_from_args(self._args(topic='standing desk', platform='TikTok', market='us', research_goal=['hooks', 'voc'], depth='deep'))
+        self.assertEqual(req.platform, 'tiktok')
+        self.assertEqual(req.research_goals, ['hooks', 'voc'])
+        self.assertEqual(req.depth, 'deep')
+
+    def test_legacy_goal_without_new_request_returns_none(self):
+        import run_research
+        req = run_research.load_research_request_from_args(self._args(goal='æ—§ Douyin è°ƒç ”'))
+        self.assertIsNone(req)
+
+    def test_request_file_and_convenience_args_cannot_be_mixed(self):
+        import run_research
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / 'request.json'
+            path.write_text(json.dumps({'topic': 'x', 'platform': 'tiktok', 'market': 'US', 'research_goals': ['hooks']}), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'cannot mix'):
+                run_research.load_research_request_from_args(self._args(request=str(path), topic='other'))
+
+    def test_new_request_parser_does_not_require_internal_profile_or_endpoint(self):
+        text = (ROOT / 'scripts' / 'run_research.py').read_text(encoding='utf-8')
+        self.assertIn('--request', text)
+        self.assertIn('--research-goal', text)
+        self.assertNotIn('--profile', text)
+        self.assertNotIn('--endpoint', text)
+
+    def test_new_request_requires_plan_only_in_phase1(self):
+        import run_research
+        req = run_research.load_research_request_from_args(self._args(topic='desk', platform='tiktok', market='US', research_goal=['hooks']))
+        result = run_research.build_intake_plan(req)
+        self.assertEqual(result['profile']['profile_id'], 'tiktok-video-intelligence-v1')
+        self.assertEqual(result['execution_status'], 'PLAN_ONLY_FOUNDATION')
+        self.assertEqual(result['missing_material_fields'], [])
+
+class PortabilityAndDocsTests(unittest.TestCase):
+
+    def test_foundation_modules_have_no_host_project_imports(self):
+        names = ['research_request.py', 'profile_loader.py', 'profile_resolver.py', 'endpoint_registry.py', 'research_planner.py']
+        text = '\n'.join(((ROOT / 'scripts' / name).read_text(encoding='utf-8') for name in names)).lower()
+        self.assertNotIn('import hco', text)
+        self.assertNotIn('import hermes', text)
+        self.assertNotIn('import shopify', text)
+
+    def test_gitignore_excludes_plaintext_config_and_runtime_outputs(self):
+        text = (ROOT / '.gitignore').read_text(encoding='utf-8')
+        self.assertIn('config.json', text)
+        self.assertIn('__pycache__/', text)
+        self.assertIn('social-research/', text)
+
+    def test_skill_defines_runtime_intake_not_fixed_business_request(self):
+        text = (ROOT / 'SKILL.md').read_text(encoding='utf-8')
+        lowered = text.lower()
+        self.assertIn('researchrequest', lowered)
+        self.assertIn('research intake', lowered)
+        self.assertIn('profile resolver', lowered)
+        self.assertNotIn('ä¾‹ï¼š"å® ç‰©é˜²æ»‘è¢œé€‰é¢˜è°ƒç ”', lowered)
+
+    def test_skill_says_user_need_not_provide_internal_profile_or_endpoint(self):
+        text = (ROOT / 'SKILL.md').read_text(encoding='utf-8')
+        self.assertIn('ä¸å¾—è¦æ±‚ç”¨æˆ·æä¾›', text)
+        self.assertIn('endpoint', text.lower())
+        self.assertIn('profile', text.lower())
+
+    def test_routing_table_marks_endpoints_json_as_machine_authority(self):
+        text = (ROOT / 'references' / 'routing-table.md').read_text(encoding='utf-8')
+        self.assertIn('endpoints.json', text)
+        self.assertIn('å”¯ä¸€æœºå™¨æƒå¨', text)
+
+    def test_distributed_profiles_contain_no_api_key(self):
+        text = '\n'.join((p.read_text(encoding='utf-8') for p in (ROOT / 'references' / 'profiles').glob('*.json')))
+        self.assertNotIn('api_key', text.lower())
+        self.assertNotIn('bearer ', text.lower())
+if __name__ == '__main__':
+    unittest.main()
