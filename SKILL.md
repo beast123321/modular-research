@@ -230,7 +230,24 @@ scripts/endpoint_registry.py
 
 不得假设一个 API 家族使用相同 HTTP method。
 
-`status=documented` 只表示文档 contract 已登记，**不等于 live-verified**。
+状态证据边界：
+
+- `documented`：文档 contract 已登记，但尚无本项目真实 Provider 成功响应；
+- `verified`：已有较早项目级验证，但没有当前 `live_verified` 元数据；
+- `live_verified`：已通过受控真实 Provider 调用，并记录 `verification_basis`、`validation_calls` 与 normalizer 验证结果。
+
+当前 Douyin `live_verified` capability 仅限：
+
+```text
+video_detail_v3
+video_search
+video_comments_v3
+user_profile_v3
+creator_posts_v3
+video_statistics_v3
+```
+
+`video_detail_by_share_url_v3` 未包含在 2026-08-26 的真实验证中，继续保持 `documented`。
 
 ---
 
@@ -279,7 +296,7 @@ REFERENCE_SEED (有 reference 时)
 关键约束：
 
 - App V3 与 legacy Web capability 使用独立 registry 名称，不能覆盖 Topic Radar 兼容 contract；
-- Search first page 使用 Provider documented search contract；
+- Search first page 使用 Provider contract；
 - `fetch_video_statistics` 是显式 metrics enrichment，每次最多 2 个作品 ID；
 - App V3 comments 保持 `count=20`；
 - Creator Posts 遵守 Provider count 上限；
@@ -321,7 +338,7 @@ provider_default
 unknown
 ```
 
-`provider_default` 是预算估算，不得冒充 endpoint 精确报价。
+`provider_default` 是预算估算，不得冒充 endpoint 精确报价。`live_verified` 也不自动意味着 endpoint 精确价格已验证。
 
 未经用户授权不得扩大付费范围；CI 不得注入 API Key，不得执行付费请求。
 
@@ -587,6 +604,8 @@ creator_posts_v3
 
 `--max-budget-usd` 是金额闸门，不代表允许增加调用次数；`--max-calls` 仍是独立硬上限。
 
+2026-08-26 已完成一次受控真实 Douyin 验证：`calls_attempted=6`、`calls_succeeded=6`、`calls_failed=0`。本次实际调用到的六个 capability 均取得 provider code 200 且通过 normalizer，因此可标记 `live_verified`。计划中的 `$0.006` 只作为 provider-default 成本估算，不是实际账单证据。
+
 ### TikTok
 
 TikTok 兼容入口：
@@ -605,8 +624,6 @@ DNS/transport failure 必须报告为 environment/transport failure，不得误�
 
 只有 `calls_attempted > 0` 且取得真实 Provider response，才可把对应 endpoint 视为已取得 live-validation 证据；失败或未调用的 endpoint 不得升级状态。
 
-当前 Douyin App V3 contract 已完成离线 fixture/CI 验证，但在真实 TikHub Provider 请求成功之前，Registry 中相关 endpoint 必须继续保持 `status=documented`，不得预先标记为 `live_verified`。
-
 ---
 
 ## 16. CI / Completion Gate
@@ -619,7 +636,7 @@ GitHub Actions 必须在 Python：
 3.13
 ```
 
-运行 Phase 10 → Phase 9 → Phase 8 → ... → Foundation 与 Legacy regression，并执行：
+运行 Phase 11 → Phase 10 → Phase 9 → Phase 8 → ... → Foundation 与 Legacy regression，并执行：
 
 ```text
 compileall
