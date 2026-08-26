@@ -21,8 +21,24 @@ def resolve_profile(
     profiles: dict[str, dict] | None = None,
 ) -> ProfileResolution:
     available = profiles if profiles is not None else load_profiles()
-    candidates: list[tuple[int, str, list[str]]] = []
 
+    if request.platform == "douyin" and request.reference_content:
+        profile_id = "douyin-video-intelligence-v1"
+        profile = available.get(profile_id)
+        if profile:
+            supported = set(profile.get("supported_goals") or [])
+            matched = [goal for goal in request.research_goals if goal in supported]
+            if matched:
+                reasons = ["PLATFORM_DOUYIN", "REFERENCE_CONTENT"]
+                reasons.extend(f"GOAL_{goal.upper()}" for goal in matched)
+                return ProfileResolution(
+                    profile_id=profile_id,
+                    reason_codes=reasons,
+                    confidence=0.99,
+                    warnings=[],
+                )
+
+    candidates: list[tuple[int, str, list[str]]] = []
     for profile_id, profile in available.items():
         if str(profile.get("platform", "")).lower() != request.platform:
             continue
