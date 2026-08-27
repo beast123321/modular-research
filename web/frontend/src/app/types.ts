@@ -191,3 +191,11 @@ export type BriefSummary = {
   evidence_refs: string[];
   timeline: unknown[];
 };
+
+export type ReportSummary = {
+  persisted_final_report: boolean;
+  artifact: string | null;
+  markdown: string | null;
+  notice: string | null;
+  available_structured_artifacts?: string[];
+};

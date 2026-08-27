@@ -5,6 +5,7 @@ import { CreatorsPage } from "../pages/CreatorsPage";
 import { EvidenceDetailPage } from "../pages/EvidenceDetailPage";
 import { IntelligencePage } from "../pages/IntelligencePage";
 import { MediaPage } from "../pages/MediaPage";
+import { ReportPage } from "../pages/ReportPage";
 import { RunsPage } from "../pages/RunsPage";
 import { VideoDetailPage } from "../pages/VideoDetailPage";
 import { VideosPage } from "../pages/VideosPage";
@@ -21,6 +22,7 @@ export function App() {
       <Route path="/runs/:runId/voc" element={<VocPage />} />
       <Route path="/runs/:runId/media" element={<MediaPage />} />
       <Route path="/runs/:runId/intelligence" element={<IntelligencePage />} />
+      <Route path="/runs/:runId/report" element={<ReportPage />} />
       <Route path="*" element={<RunsPage />} />
     </Routes>
   );
