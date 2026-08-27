@@ -21,20 +21,28 @@
 
 ## 发布状态
 
-当前版本：`1.1.3`。
+当前版本：`1.2.0`。
 
-`1.1.3` 是 Douyin Provider Verification Metadata release。基于 2026-08-26 的一次受控真实 TikHub 验证，以下六个 capability 已取得真实 Provider response，验证结果为 `6 attempted / 6 succeeded / 0 failed`，且 normalizer 均通过，因此 Registry 状态升级为 `live_verified`：
+`1.2.0` 是 TikTok Provider Verification release。2026-08-27 在 `12` 次 hard call ceiling、内部 hard budget `$0.012` 下完成了一次受控真实 TikHub 验证：`12 attempted / 12 succeeded / 0 failed`。只有实际取得 Provider code 200 且 normalizer 完成的 capability 才升级为 `live_verified`：
 
 ```text
-video_detail_v3
+ad_percentile
+ads_detail
+ads_search
+creator_posts
+creator_search_insights
+creator_search_insights_trend
+top_ads_spotlight
+top_contents_list
+video_comments
+video_detail
+video_metrics
 video_search
-video_comments_v3
-user_profile_v3
-creator_posts_v3
-video_statistics_v3
 ```
 
-`video_detail_by_share_url_v3` 未包含在该次真实验证中，继续保持 `documented`。验证计划的 `$0.006` 是 provider-default 预算估算，不是 endpoint 精确价格或最终账单。v1.1.1 引入的 bounded Standard sampling 保持不变：典型基线 `38 expected / 50 max`。
+未在该次真实 run 中调用的 TikTok capability（例如 `creator_search_insights_detail`、`creator_search_insights_videos`、`ad_keyframe_analysis`、`ad_interactive_analysis`、`top_contents_item_detail`）继续保持 `documented`。这 12 个新验证 capability 的 `unit_price_usd` 仍为 `null`；`$0.012` 仅是按 provider-default `$0.001/request` 得出的预算上界估算，不是 endpoint 精确价格或 Provider 最终账单。
+
+v1.1.3 的六个 Douyin `live_verified` capability 及其 2026-08-26 验证 metadata 保持不变；v1.1.1 的 bounded Standard sampling / Planner fan-out 也未扩大。
 
 ## 安装
 
@@ -375,7 +383,26 @@ python scripts/live_validation.py \
 --max-budget-usd <hard ceiling>
 ```
 
-DNS/transport failure 必须报告为 environment/transport failure；只有实际取得 Provider response 才能把 endpoint 标记为 live-validated。
+DNS/transport failure 必须报告为 environment/transport failure；只有实际取得 Provider response 且 normalizer 完成的 endpoint 才能升级为 `live_verified`。
+
+2026-08-27 的受控 TikTok 验收使用 `standing desk / US`，在 `call_ceiling=12` 下取得 `12/12` 成功 Provider response，并完成 normalizer。实际验证的 capability 是：
+
+```text
+creator_search_insights
+video_search
+top_contents_list
+ads_search
+top_ads_spotlight
+creator_search_insights_trend
+video_detail
+video_metrics
+video_comments
+creator_posts
+ads_detail
+ad_percentile
+```
+
+该事实只支持上述实际调用到的 12 个 capability；未调用 endpoint 不得据此升级。`estimated_max_cost_usd=0.012` 的 `pricing_basis=provider_default`，因此不能推导 endpoint exact price，也不能视为最终账单。
 
 ## 输出
 
@@ -401,6 +428,7 @@ Raw Evidence 落盘前脱敏；Normalized/Derived 数据通过 `raw_evidence_id`
 GitHub Actions 在 Python `3.10 / 3.12 / 3.13` 上运行离线测试，不注入 TikHub Key，也不执行付费请求。
 
 ```bash
+PYTHONPATH=scripts python -m unittest scripts/test_phase13_tiktok_release.py
 PYTHONPATH=scripts python -m unittest scripts/test_phase11_provider_verification.py
 PYTHONPATH=scripts python -m unittest scripts/test_phase10_live_validation.py
 PYTHONPATH=scripts python -m unittest scripts/test_phase9_budget.py

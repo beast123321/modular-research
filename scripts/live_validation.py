@@ -28,6 +28,20 @@ from research_executor_v2 import (
 )
 
 
+LIVE_VALIDATION_CALL_CEILINGS = {"douyin": 6, "tiktok": 12}
+LIVE_VALIDATION_PRICING_BASES = {"provider_default", "endpoint_explicit", "unknown"}
+
+
+def clamp_call_ceiling(platform: str, requested: int | None) -> int:
+    key = str(platform).strip().lower()
+    ceiling = LIVE_VALIDATION_CALL_CEILINGS.get(key)
+    if ceiling is None:
+        raise ValueError(f"unsupported live-validation platform: {key}")
+    if requested is None:
+        return ceiling
+    return max(0, min(ceiling, int(requested)))
+
+
 @dataclass(frozen=True)
 class ProbeSpec:
     capability: str
@@ -183,14 +197,18 @@ class LiveValidationRunner:
         max_calls: int,
         max_budget_usd: float,
         unit_price_usd: float = 0.001,
+        pricing_basis: str = "provider_default",
         skip_dns_check: bool = False,
     ) -> dict[str, Any]:
         platform = str(platform).strip().lower()
+        max_calls = clamp_call_ceiling(platform, max_calls)
+        pricing_basis = str(pricing_basis).strip()
+        if pricing_basis not in LIVE_VALIDATION_PRICING_BASES:
+            raise ValueError(f"unsupported pricing basis: {pricing_basis}")
         normalizer = _normalizer_for(platform)
         output_dir = Path(output_dir)
         raw_dir = output_dir / "raw"
         raw_dir.mkdir(parents=True, exist_ok=True)
-        max_calls = max(0, int(max_calls))
         estimated = round(max_calls * float(unit_price_usd), 6)
         base_report: dict[str, Any] = {
             "schema_version": "1.0",
@@ -200,6 +218,7 @@ class LiveValidationRunner:
             "call_ceiling": max_calls,
             "estimated_max_cost_usd": estimated,
             "unit_price_basis_usd": float(unit_price_usd),
+            "pricing_basis": pricing_basis,
             "results": [],
         }
         if estimated > float(max_budget_usd):
@@ -261,6 +280,128 @@ class LiveValidationRunner:
             queued_caps.add(capability)
             queue.append(ProbeSpec(capability, payload))
 
+        def schedule_downstream(probe: ProbeSpec, response: Any) -> None:
+            if platform == "douyin":
+                remember_videos(extract_video_ids(response))
+                remember_creators(extract_creator_ids(response))
+                if probe.capability == "video_detail_v3":
+                    reference_id = str(probe.payload.get("aweme_id") or "").strip()
+                    if reference_id:
+                        remember_videos([reference_id])
+                        enqueue(
+                            "video_comments_v3",
+                            {"aweme_id": reference_id, "cursor": 0, "count": 20},
+                        )
+                    creator = next(
+                        (row for row in discovered_creators if row.get("sec_user_id")),
+                        None,
+                    )
+                    if creator:
+                        sec_user_id = str(creator["sec_user_id"])
+                        enqueue("user_profile_v3", {"sec_user_id": sec_user_id})
+                        enqueue(
+                            "creator_posts_v3",
+                            {
+                                "sec_user_id": sec_user_id,
+                                "max_cursor": 0,
+                                "count": 20,
+                                "sort_type": 0,
+                                "channel": "normal",
+                            },
+                        )
+                elif probe.capability == "video_search" and discovered_video_ids:
+                    enqueue(
+                        "video_statistics_v3",
+                        {"aweme_ids": ",".join(discovered_video_ids[:2])},
+                    )
+                return
+
+            if probe.capability == "video_search":
+                videos = extract_video_ids(response)
+                creators = extract_creator_ids(response)
+                if videos:
+                    video_id = videos[0]
+                    enqueue(
+                        "video_detail",
+                        {
+                            "aweme_id": video_id,
+                            "region": probe.payload.get("region", "US"),
+                        },
+                    )
+                    enqueue("video_metrics", {"item_id": video_id})
+                    enqueue(
+                        "video_comments",
+                        {"aweme_id": video_id, "cursor": 0, "count": 3},
+                    )
+                if creators:
+                    creator = creators[0]
+                    creator_payload: dict[str, Any] = {
+                        "max_cursor": 0,
+                        "count": 3,
+                        "sort_type": 0,
+                    }
+                    if creator.get("sec_user_id"):
+                        creator_payload["sec_user_id"] = creator["sec_user_id"]
+                    elif creator.get("unique_id"):
+                        creator_payload["unique_id"] = creator["unique_id"]
+                    enqueue("creator_posts", creator_payload)
+            elif probe.capability == "creator_search_insights":
+                rows = extract_search_insights(response)
+                if rows:
+                    row = rows[0]
+                    query_id = row.get("query_id")
+                    keyword = row.get("keyword")
+                    if query_id:
+                        enqueue(
+                            "creator_search_insights_trend",
+                            {
+                                "query_id_str": query_id,
+                                "from_tab_path": "TRENDING,TOPICS",
+                                "query_analysis_required": True,
+                            },
+                        )
+                    if keyword:
+                        enqueue(
+                            "creator_search_insights_videos",
+                            {"keyword": keyword, "offset": 0, "count": 3},
+                        )
+            elif probe.capability in {"ads_search", "top_ads_spotlight"}:
+                ids = extract_ad_ids(response)
+                if ids:
+                    ad_id = ids[0]
+                    enqueue("ads_detail", {"ads_id": ad_id})
+                    enqueue(
+                        "ad_percentile",
+                        {
+                            "material_id": ad_id,
+                            "metric": "ctr_percentile",
+                            "period_type": 180,
+                        },
+                    )
+                    enqueue(
+                        "ad_keyframe_analysis",
+                        {"material_id": ad_id, "metric": "retain_ctr"},
+                    )
+                    enqueue(
+                        "ad_interactive_analysis",
+                        {
+                            "material_id": ad_id,
+                            "metric_type": "remain",
+                            "period_type": 180,
+                        },
+                    )
+            elif probe.capability == "top_contents_list":
+                ids = extract_top_content_ids(response)
+                if ids:
+                    payload = {
+                        "item_id": ids[0],
+                        "country_code": probe.payload.get("country_code", "US"),
+                    }
+                    for key in ("period_end_timestamp", "period_dimension"):
+                        if key in probe.payload:
+                            payload[key] = probe.payload[key]
+                    enqueue("top_contents_item_detail", payload)
+
         index = 0
         while index < len(queue) and attempted < max_calls:
             probe = queue[index]
@@ -279,169 +420,9 @@ class LiveValidationRunner:
                 "request_location", "query" if entry["method"] == "GET" else "json"
             )
             kwargs["body" if location == "json" else "params"] = dict(probe.payload)
+
             try:
                 response = self.transport(**kwargs)
-                safe = core.redact_payload(response)
-                (raw_dir / f"{attempted:02d}_{probe.capability}.json").write_text(
-                    json.dumps(safe, ensure_ascii=False, indent=2), encoding="utf-8"
-                )
-                provider_code = response.get("code") if isinstance(response, dict) else None
-                if provider_code not in (None, 200):
-                    failed += 1
-                    results.append(
-                        {
-                            "capability": probe.capability,
-                            "method": entry["method"],
-                            "request_location": location,
-                            "path": entry["path"],
-                            "provider_code": provider_code,
-                            "shape": summarize_shape(response),
-                            "status": "error",
-                            "error_class": "provider",
-                        }
-                    )
-                    continue
-
-                succeeded += 1
-                bundle = normalizer(
-                    probe.capability,
-                    safe,
-                    raw_evidence_id=f"live:{attempted:02d}",
-                    request_payload=probe.payload,
-                )
-                results.append(
-                    {
-                        "capability": probe.capability,
-                        "method": entry["method"],
-                        "request_location": location,
-                        "path": entry["path"],
-                        "provider_code": provider_code,
-                        "shape": summarize_shape(response),
-                        "normalizer_counts": {key: len(value) for key, value in bundle.items()},
-                        "status": "ok",
-                    }
-                )
-
-                if platform == "douyin":
-                    remember_videos(extract_video_ids(response))
-                    remember_creators(extract_creator_ids(response))
-                    if probe.capability == "video_detail_v3":
-                        reference_id = str(probe.payload.get("aweme_id") or "").strip()
-                        if reference_id:
-                            remember_videos([reference_id])
-                            enqueue(
-                                "video_comments_v3",
-                                {"aweme_id": reference_id, "cursor": 0, "count": 20},
-                            )
-                        creator = next(
-                            (row for row in discovered_creators if row.get("sec_user_id")),
-                            None,
-                        )
-                        if creator:
-                            sec_user_id = str(creator["sec_user_id"])
-                            enqueue("user_profile_v3", {"sec_user_id": sec_user_id})
-                            enqueue(
-                                "creator_posts_v3",
-                                {
-                                    "sec_user_id": sec_user_id,
-                                    "max_cursor": 0,
-                                    "count": 20,
-                                    "sort_type": 0,
-                                    "channel": "normal",
-                                },
-                            )
-                    elif probe.capability == "video_search" and discovered_video_ids:
-                        enqueue(
-                            "video_statistics_v3",
-                            {"aweme_ids": ",".join(discovered_video_ids[:2])},
-                        )
-                    continue
-
-                if probe.capability == "video_search":
-                    videos = extract_video_ids(response)
-                    creators = extract_creator_ids(response)
-                    if videos:
-                        video_id = videos[0]
-                        enqueue(
-                            "video_detail",
-                            {
-                                "aweme_id": video_id,
-                                "region": probe.payload.get("region", "US"),
-                            },
-                        )
-                        enqueue("video_metrics", {"item_id": video_id})
-                        enqueue(
-                            "video_comments",
-                            {"aweme_id": video_id, "cursor": 0, "count": 3},
-                        )
-                    if creators:
-                        creator = creators[0]
-                        creator_payload: dict[str, Any] = {
-                            "max_cursor": 0,
-                            "count": 3,
-                            "sort_type": 0,
-                        }
-                        if creator.get("sec_user_id"):
-                            creator_payload["sec_user_id"] = creator["sec_user_id"]
-                        elif creator.get("unique_id"):
-                            creator_payload["unique_id"] = creator["unique_id"]
-                        enqueue("creator_posts", creator_payload)
-                elif probe.capability == "creator_search_insights":
-                    rows = extract_search_insights(response)
-                    if rows:
-                        row = rows[0]
-                        query_id = row.get("query_id")
-                        keyword = row.get("keyword")
-                        if query_id:
-                            enqueue(
-                                "creator_search_insights_trend",
-                                {
-                                    "query_id_str": query_id,
-                                    "from_tab_path": "TRENDING,TOPICS",
-                                    "query_analysis_required": True,
-                                },
-                            )
-                        if keyword:
-                            enqueue(
-                                "creator_search_insights_videos",
-                                {"keyword": keyword, "offset": 0, "count": 3},
-                            )
-                elif probe.capability in {"ads_search", "top_ads_spotlight"}:
-                    ids = extract_ad_ids(response)
-                    if ids:
-                        ad_id = ids[0]
-                        enqueue("ads_detail", {"ads_id": ad_id})
-                        enqueue(
-                            "ad_percentile",
-                            {
-                                "material_id": ad_id,
-                                "metric": "ctr_percentile",
-                                "period_type": 180,
-                            },
-                        )
-                        enqueue(
-                            "ad_keyframe_analysis",
-                            {"material_id": ad_id, "metric": "retain_ctr"},
-                        )
-                        enqueue(
-                            "ad_interactive_analysis",
-                            {
-                                "material_id": ad_id,
-                                "metric_type": "remain",
-                                "period_type": 180,
-                            },
-                        )
-                elif probe.capability == "top_contents_list":
-                    ids = extract_top_content_ids(response)
-                    if ids:
-                        payload = {
-                            "item_id": ids[0],
-                            "country_code": probe.payload.get("country_code", "US"),
-                        }
-                        for key in ("period_end_timestamp", "period_dimension"):
-                            if key in probe.payload:
-                                payload[key] = probe.payload[key]
-                        enqueue("top_contents_item_detail", payload)
             except Exception as exc:
                 failed += 1
                 results.append(
@@ -455,6 +436,70 @@ class LiveValidationRunner:
                         "error_type": type(exc).__name__,
                     }
                 )
+                continue
+
+            safe = core.redact_payload(response)
+            (raw_dir / f"{attempted:02d}_{probe.capability}.json").write_text(
+                json.dumps(safe, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            provider_code = response.get("code") if isinstance(response, dict) else None
+            if provider_code not in (None, 200):
+                failed += 1
+                results.append(
+                    {
+                        "capability": probe.capability,
+                        "method": entry["method"],
+                        "request_location": location,
+                        "path": entry["path"],
+                        "provider_code": provider_code,
+                        "shape": summarize_shape(response),
+                        "status": "error",
+                        "error_class": "provider",
+                    }
+                )
+                continue
+
+            try:
+                bundle = normalizer(
+                    probe.capability,
+                    safe,
+                    raw_evidence_id=f"live:{attempted:02d}",
+                    request_payload=probe.payload,
+                )
+            except Exception as exc:
+                failed += 1
+                results.append(
+                    {
+                        "capability": probe.capability,
+                        "method": entry["method"],
+                        "request_location": location,
+                        "path": entry["path"],
+                        "provider_code": provider_code,
+                        "shape": summarize_shape(response),
+                        "status": "error",
+                        "error_class": "normalizer",
+                        "error_type": type(exc).__name__,
+                    }
+                )
+                continue
+
+            succeeded += 1
+            result_row = {
+                "capability": probe.capability,
+                "method": entry["method"],
+                "request_location": location,
+                "path": entry["path"],
+                "provider_code": provider_code,
+                "shape": summarize_shape(response),
+                "normalizer_counts": {key: len(value) for key, value in bundle.items()},
+                "status": "ok",
+            }
+            results.append(result_row)
+            try:
+                schedule_downstream(probe, response)
+            except Exception as exc:
+                result_row["fanout_status"] = "error"
+                result_row["fanout_error_type"] = type(exc).__name__
 
         base_report.update(
             {
@@ -496,12 +541,12 @@ def main() -> int:
             topic=args.topic,
             reference_aweme_id=args.reference_aweme_id,
         )
-        max_calls = 6 if args.max_calls is None else max(0, min(6, args.max_calls))
     else:
         probes = build_default_probes(topic=args.topic, market=args.market)
-        max_calls = 15 if args.max_calls is None else args.max_calls
 
+    max_calls = clamp_call_ceiling(args.platform, args.max_calls)
     unit_price = 0.001
+    pricing_basis = "provider_default"
     plan = {
         "execution_status": "PLAN_ONLY" if not args.execute else "READY",
         "platform": args.platform,
@@ -511,7 +556,7 @@ def main() -> int:
         "initial_capabilities": [probe.capability for probe in probes],
         "call_ceiling": max_calls,
         "estimated_max_cost_usd": round(max_calls * unit_price, 6),
-        "pricing_basis": "provider_default",
+        "pricing_basis": pricing_basis,
     }
     if not args.execute:
         print(json.dumps(plan, ensure_ascii=False, indent=2))
@@ -535,6 +580,7 @@ def main() -> int:
         max_calls=max_calls,
         max_budget_usd=args.max_budget_usd,
         unit_price_usd=unit_price,
+        pricing_basis=pricing_basis,
     )
     public = dict(result)
     public["api_key_source"] = source

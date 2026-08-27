@@ -148,7 +148,6 @@ class EndpointRegistryTests(unittest.TestCase):
         ep = EndpointRegistry().get('tikhub', 'tiktok', 'video_search')
         self.assertEqual(ep['method'], 'GET')
         self.assertEqual(ep['path'], '/api/v1/tiktok/app/v3/fetch_video_search_result')
-        self.assertEqual(ep['status'], 'documented')
 
     def test_registry_loads_tiktok_creator_search_insights(self):
         from endpoint_registry import EndpointRegistry
