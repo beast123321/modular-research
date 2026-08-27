@@ -130,3 +130,11 @@ export type VocSummary = {
   denominator: number;
   labels: VocLabel[];
 };
+
+export type MediaSummary = {
+  run_id: string;
+  video_id: string;
+  keyframe_count: number;
+  transcript_count: number;
+  creative_analysis_count: number;
+};

@@ -1,4 +1,4 @@
-import type { CreatorDetail, CreatorSummary, EvidenceDetail, LineageGraph, Page, RunSummary, VideoDetail, VideoSummary, VocSummary } from "./types";
+import type { CreatorDetail, CreatorSummary, EvidenceDetail, LineageGraph, MediaSummary, Page, RunSummary, VideoDetail, VideoSummary, VocSummary } from "./types";
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path, { headers: { Accept: "application/json" } });
@@ -46,4 +46,8 @@ export function getCreator(runId: string, creatorId: string): Promise<CreatorDet
 
 export function getVoc(runId: string): Promise<VocSummary> {
   return getJson<VocSummary>(`/api/runs/${encodeURIComponent(runId)}/voc`);
+}
+
+export function listMedia(runId: string): Promise<MediaSummary[]> {
+  return getJson<MediaSummary[]>(`/api/runs/${encodeURIComponent(runId)}/media`);
 }

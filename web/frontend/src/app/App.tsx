@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router-dom";
 import { CreatorDetailPage } from "../pages/CreatorDetailPage";
 import { CreatorsPage } from "../pages/CreatorsPage";
 import { EvidenceDetailPage } from "../pages/EvidenceDetailPage";
+import { MediaPage } from "../pages/MediaPage";
 import { RunsPage } from "../pages/RunsPage";
 import { VideoDetailPage } from "../pages/VideoDetailPage";
 import { VideosPage } from "../pages/VideosPage";
@@ -17,6 +18,7 @@ export function App() {
       <Route path="/runs/:runId/creators/:creatorId" element={<CreatorDetailPage />} />
       <Route path="/runs/:runId/creators" element={<CreatorsPage />} />
       <Route path="/runs/:runId/voc" element={<VocPage />} />
+      <Route path="/runs/:runId/media" element={<MediaPage />} />
       <Route path="*" element={<RunsPage />} />
     </Routes>
   );
