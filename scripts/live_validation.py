@@ -33,7 +33,9 @@ LIVE_VALIDATION_CALL_CEILINGS = {"douyin": 6, "tiktok": 12}
 
 def clamp_call_ceiling(platform: str, requested: int | None) -> int:
     key = str(platform).strip().lower()
-    ceiling = LIVE_VALIDATION_CALL_CEILINGS[key]
+    ceiling = LIVE_VALIDATION_CALL_CEILINGS.get(key)
+    if ceiling is None:
+        raise ValueError(f"unsupported live-validation platform: {key}")
     if requested is None:
         return ceiling
     return max(0, min(ceiling, int(requested)))
