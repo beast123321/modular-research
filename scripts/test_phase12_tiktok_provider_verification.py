@@ -86,6 +86,10 @@ class TikTokProviderVerificationV120Tests(unittest.TestCase):
         self.assertEqual(result["call_ceiling"], 12)
         self.assertEqual(result["calls_attempted"], 12)
 
+    def test_call_ceiling_preserves_controlled_error_for_unsupported_platform(self):
+        with self.assertRaisesRegex(ValueError, "unsupported live-validation platform: instagram"):
+            live_validation.clamp_call_ceiling("instagram", 3)
+
 
 if __name__ == "__main__":
     unittest.main()
