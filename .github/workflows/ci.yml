@@ -24,6 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           for test_file in \
+            scripts/test_phase13_tiktok_release.py \
             scripts/test_phase12_tiktok_provider_verification.py \
             scripts/test_phase12_provider_integrity.py \
             scripts/test_phase11_provider_verification.py \
