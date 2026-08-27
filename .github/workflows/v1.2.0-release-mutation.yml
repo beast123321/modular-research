@@ -1,4 +1,4 @@
-name: v1.2.0 offline evidence apply
+name: v1.2.0 offline release finalizer
 
 on:
   push:
@@ -9,14 +9,11 @@ on:
 
 permissions:
   contents: write
-  actions: read
 
 jobs:
-  apply-sanitized-evidence:
-    if: endsWith(github.event.head_commit.message, 'apply approved v1.2.0 sanitized TikTok evidence')
+  finalize-release-metadata:
+    if: endsWith(github.event.head_commit.message, 'finalize v1.2.0 release metadata')
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,32 +22,20 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Download already-produced sanitized evidence artifact
+      - name: Finalize version, docs, and compact registry formatting
         shell: bash
         run: |
           set -euo pipefail
-          EVIDENCE="${RUNNER_TEMP}/v1.2.0-evidence"
-          mkdir -p "$EVIDENCE"
-          gh run download 33042209247 \
-            --repo beast123321/modular-research \
-            --name v1.2.0-tiktok-provider-verification-evidence \
-            --dir "$EVIDENCE"
-          test -s "$EVIDENCE/live-validation.json"
-          test -s "$EVIDENCE/verification-manifest.json"
-      - name: Apply evidence-gated registry promotion
-        shell: bash
-        run: |
-          set -euo pipefail
-          EVIDENCE="${RUNNER_TEMP}/v1.2.0-evidence"
-          PYTHONPATH=scripts python scripts/provider_verification.py \
-            --report "$EVIDENCE/live-validation.json" \
-            --platform tiktok \
-            --registry references/endpoints.json \
-            --manifest-out references/verifications/tiktok-provider-verification-v1.2.0.json \
-            --apply > "${RUNNER_TEMP}/provider-verification-output.json"
           python - <<'PY'
           import json
           from pathlib import Path
+
+          root = Path('.')
+          version_path = root / 'VERSION'
+          readme_path = root / 'README.md'
+          release_path = root / 'docs' / 'RELEASE.md'
+          registry_path = root / 'references' / 'endpoints.json'
+          manifest_path = root / 'references' / 'verifications' / 'tiktok-provider-verification-v1.2.0.json'
 
           expected = {
               'ad_percentile',
@@ -66,37 +51,266 @@ jobs:
               'video_metrics',
               'video_search',
           }
-          manifest = json.loads(Path('references/verifications/tiktok-provider-verification-v1.2.0.json').read_text(encoding='utf-8'))
-          assert manifest['platform'] == 'tiktok'
-          assert manifest['verified_at'] == '2026-08-27'
-          assert manifest['source_status'] == 'COMPLETED'
+          manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
           assert manifest['validation_calls'] == {'attempted': 12, 'succeeded': 12, 'failed': 0}
           assert manifest['pricing_basis'] == 'provider_default'
           assert set(manifest['promoted_capabilities']) == expected
           assert manifest['non_promoted_capabilities'] == []
 
-          registry = json.loads(Path('references/endpoints.json').read_text(encoding='utf-8'))
+          registry = json.loads(registry_path.read_text(encoding='utf-8'))
+          semantic_before = json.dumps(registry, ensure_ascii=False, sort_keys=True)
           tiktok = [e for e in registry['endpoints'] if e.get('provider') == 'tikhub' and e.get('platform') == 'tiktok']
           promoted = {e['capability'] for e in tiktok if e.get('status') == 'live_verified'}
           assert promoted == expected
           for entry in tiktok:
               if entry['capability'] in expected:
                   assert entry['unit_price_usd'] is None
+                  assert entry['verified_at'] == '2026-08-27'
                   assert entry['verification_basis'] == 'real_provider_response'
+                  assert entry['validation_calls'] == {'attempted': 12, 'succeeded': 12, 'failed': 0}
                   assert entry['normalizer_validation'] == 'PASS'
               else:
                   assert entry['status'] == 'documented'
+
+          lines = ['{', f'  "schema_version": {json.dumps(registry["schema_version"], ensure_ascii=False)},', '  "endpoints": [']
+          for index, entry in enumerate(registry['endpoints']):
+              suffix = ',' if index + 1 < len(registry['endpoints']) else ''
+              lines.append('    ' + json.dumps(entry, ensure_ascii=False, separators=(',', ':')) + suffix)
+          lines.append('  ],')
+          lines.append('  "providers": {')
+          providers = list(registry['providers'].items())
+          for p_index, (provider_name, provider) in enumerate(providers):
+              lines.append(f'    {json.dumps(provider_name)}: {{')
+              items = list(provider.items())
+              for i, (key, value) in enumerate(items):
+                  comma = ',' if i + 1 < len(items) else ''
+                  if isinstance(value, dict):
+                      rendered = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+                  else:
+                      rendered = json.dumps(value, ensure_ascii=False)
+                  lines.append(f'      {json.dumps(key)}: {rendered}{comma}')
+              lines.append('    }' + (',' if p_index + 1 < len(providers) else ''))
+          lines.extend(['  }', '}'])
+          registry_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          semantic_after = json.dumps(json.loads(registry_path.read_text(encoding='utf-8')), ensure_ascii=False, sort_keys=True)
+          assert semantic_after == semantic_before
+
+          readme = readme_path.read_text(encoding='utf-8')
+          start = '## 发布状态\n'
+          end = '\n## 安装\n'
+          assert readme.count(start) == 1 and readme.count(end) == 1
+          prefix, rest = readme.split(start, 1)
+          _, tail = rest.split(end, 1)
+          release_status = '''## 发布状态
+
+当前版本：`1.2.0`。
+
+`1.2.0` 是 TikTok Provider Verification release。2026-08-27 在 `12` 次 hard call ceiling、内部 hard budget `$0.012` 下完成了一次受控真实 TikHub 验证：`12 attempted / 12 succeeded / 0 failed`。只有实际取得 Provider code 200 且 normalizer 完成的 capability 才升级为 `live_verified`：
+
+```text
+ad_percentile
+ads_detail
+ads_search
+creator_posts
+creator_search_insights
+creator_search_insights_trend
+top_ads_spotlight
+top_contents_list
+video_comments
+video_detail
+video_metrics
+video_search
+```
+
+未在该次真实 run 中调用的 TikTok capability（例如 `creator_search_insights_detail`、`creator_search_insights_videos`、`ad_keyframe_analysis`、`ad_interactive_analysis`、`top_contents_item_detail`）继续保持 `documented`。这 12 个新验证 capability 的 `unit_price_usd` 仍为 `null`；`$0.012` 仅是按 provider-default `$0.001/request` 得出的预算上界估算，不是 endpoint 精确价格或 Provider 最终账单。
+
+v1.1.3 的六个 Douyin `live_verified` capability 及其 2026-08-26 验证 metadata 保持不变；v1.1.1 的 bounded Standard sampling / Planner fan-out 也未扩大。
+'''
+          readme = prefix + release_status + end + tail
+
+          tiktok_start = '### TikTok\n'
+          tiktok_end = '\n## 输出\n'
+          assert readme.count(tiktok_start) == 1 and readme.count(tiktok_end) == 1
+          prefix, rest = readme.split(tiktok_start, 1)
+          _, tail = rest.split(tiktok_end, 1)
+          tiktok_section = '''### TikTok
+
+```bash
+python scripts/live_validation.py \\
+  --platform tiktok \\
+  --topic "standing desk" \\
+  --market US \\
+  --max-calls 12
+```
+
+真实验证同样必须显式加入：
+
+```text
+--execute
+--yes
+--max-budget-usd <hard ceiling>
+```
+
+DNS/transport failure 必须报告为 environment/transport failure；只有实际取得 Provider response 且 normalizer 完成的 endpoint 才能升级为 `live_verified`。
+
+2026-08-27 的受控 TikTok 验收使用 `standing desk / US`，在 `call_ceiling=12` 下取得 `12/12` 成功 Provider response，并完成 normalizer。实际验证的 capability 是：
+
+```text
+creator_search_insights
+video_search
+top_contents_list
+ads_search
+top_ads_spotlight
+creator_search_insights_trend
+video_detail
+video_metrics
+video_comments
+creator_posts
+ads_detail
+ad_percentile
+```
+
+该事实只支持上述实际调用到的 12 个 capability；未调用 endpoint 不得据此升级。`estimated_max_cost_usd=0.012` 的 `pricing_basis=provider_default`，因此不能推导 endpoint exact price，也不能视为最终账单。
+'''
+          readme = prefix + tiktok_section + tiktok_end + tail
+          old_test = 'PYTHONPATH=scripts python -m unittest scripts/test_phase11_provider_verification.py\n'
+          assert old_test in readme
+          readme = readme.replace(
+              old_test,
+              'PYTHONPATH=scripts python -m unittest scripts/test_phase13_tiktok_release.py\n' + old_test,
+              1,
+          )
+          readme_path.write_text(readme, encoding='utf-8')
+
+          release = '''# Modular Research v1.2.0 发布说明
+
+## 状态
+
+`v1.2.0` 是 TikTok Provider Verification release。它不扩大现有 bounded Research Planner、Standard sampling 或研究 fan-out；本次只把已有真实 Provider + normalizer 证据写回 Endpoint Registry，并加入可回归的 TikTok verification/release gate。
+
+## 真实验证证据
+
+2026-08-27 使用受控 TikHub live-validation harness 对 `standing desk / US` 完成一次真实 TikTok 验证：
+
+```text
+CALL_CEILING=12
+CALLS_ATTEMPTED=12
+CALLS_SUCCEEDED=12
+CALLS_FAILED=0
+ESTIMATED_MAX_COST_USD=0.012
+PRICING_BASIS=provider_default
+```
+
+以下 12 个 capability 实际取得 Provider code 200，且对应 normalizer 调用完成：
+
+```text
+ad_percentile
+ads_detail
+ads_search
+creator_posts
+creator_search_insights
+creator_search_insights_trend
+top_ads_spotlight
+top_contents_list
+video_comments
+video_detail
+video_metrics
+video_search
+```
+
+因此这些 capability 的 Registry verification metadata 升级为：
+
+```text
+status=live_verified
+verified_at=2026-08-27
+verification_basis=real_provider_response
+validation_calls={attempted:12,succeeded:12,failed:0}
+normalizer_validation=PASS
+```
+
+`PASS` 表示 Provider contract 与 normalizer 执行链完成；它不等价于每一种归一化 Evidence 类型都必须非空。未在真实 run 中调用的 TikTok capability 不据此升级，例如 `creator_search_insights_detail`、`creator_search_insights_videos`、`ad_keyframe_analysis`、`ad_interactive_analysis`、`top_contents_item_detail` 仍保持 `documented`。
+
+## Pricing boundary
+
+`$0.012` 是按 provider-default `$0.001/request` 计算的 hard-budget 规划上界，不是 Provider 最终账单，也不是任何单一 TikTok endpoint 的精确报价。
+
+因此本次 12 个新 `live_verified` TikTok capability 全部继续保持：
+
+```text
+unit_price_usd=null
+price_source=provider_default
+is_endpoint_exact=false
+```
+
+需要 endpoint/day-specific 精确报价时，应单独使用 Provider 的价格查询能力，而不是从本次验证预算反推。
+
+## Evidence boundary
+
+公开仓库只保留脱敏 verification manifest：
+
+`references/verifications/tiktok-provider-verification-v1.2.0.json`
+
+其中只包含平台、日期、call summary、pricing basis、promoted/non-promoted capability，不包含 API Key、request payload、raw Provider response 或 response shape。真实 `live-validation.json` 仅用于受控验证与 promotion 过程，不进入 release tree。
+
+## Douyin compatibility
+
+v1.1.3 已验证的六个 Douyin capability 保持不变：
+
+```text
+video_detail_v3
+video_search
+video_comments_v3
+user_profile_v3
+creator_posts_v3
+video_statistics_v3
+```
+
+它们仍保持 `verified_at=2026-08-26`、`validation_calls={attempted:6,succeeded:6,failed:0}` 和 `normalizer_validation=PASS`。Douyin share-url fallback 仍只是 `documented` contract。
+
+## TDD / execution evidence
+
+- TikTok real-provider run：GitHub Actions run `33042209247`，批准边界为最多 12 calls / `$0.012`；最终 `12/12` 成功。
+- Phase 13 RED：run `33047117651` 精确失败于 `VERSION=1.1.3`，而 v1.2.0 release guard 要求 `1.2.0`。
+- Sanitized evidence apply：run `33047369931`，artifact 下载、evidence-gated promotion、file-exact scope guard 与 commit 全部 PASS。
+- 最终 PR 前 CI 继续使用 Python `3.10 / 3.12 / 3.13` 的 offline matrix；不注入 TikHub Key，也不执行付费请求。
+
+## Security / repository boundary
+
+本 release **不提交**：
+
+- TikHub API Key；
+- 本地 `config.json`；
+- raw Provider response；
+- `live-validation.json`；
+- live-validation 本地输出目录；
+- 一次性付费 Provider workflow / trigger marker；
+- 一次性 evidence-apply workflow / trigger marker。
+
+常规 CI 保持 offline，不注入 TikHub Key，不产生付费请求。
+
+## License
+
+当前仓库仍未声明许可证；v1.2.0 不添加 MIT、Apache-2.0 或其他许可证。
+'''
+          release_path.write_text(release, encoding='utf-8')
+          version_path.write_text('1.2.0\n', encoding='utf-8')
+
+          assert version_path.read_text(encoding='utf-8').strip() == '1.2.0'
+          final_readme = readme_path.read_text(encoding='utf-8')
+          assert '当前版本：`1.2.0`' in final_readme
+          assert 'provider-default' in final_readme
+          assert '# Modular Research v1.2.0 发布说明' in release_path.read_text(encoding='utf-8')
           PY
-      - name: Commit only registry and sanitized manifest
+      - name: Commit release metadata only
         shell: bash
         run: |
           set -euo pipefail
           git status --porcelain=v1 -uall
           changed="$(git status --porcelain=v1 -uall | awk '{print $2}' | sort)"
-          expected="$(printf '%s\n' references/endpoints.json references/verifications/tiktok-provider-verification-v1.2.0.json | sort)"
+          expected="$(printf '%s\n' README.md VERSION docs/RELEASE.md references/endpoints.json | sort)"
           test "$changed" = "$expected"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add references/endpoints.json references/verifications/tiktok-provider-verification-v1.2.0.json
-          git commit -m 'feat: record v1.2.0 TikTok provider evidence'
+          git add README.md VERSION docs/RELEASE.md references/endpoints.json
+          git commit -m 'release: finalize v1.2.0 TikTok provider verification'
           git push origin HEAD:release/v1.2.0-tiktok-provider-verification
