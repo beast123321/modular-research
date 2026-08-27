@@ -1,4 +1,4 @@
-import type { RunSummary } from "./types";
+import type { EvidenceDetail, LineageGraph, RunSummary } from "./types";
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path, { headers: { Accept: "application/json" } });
@@ -10,4 +10,16 @@ async function getJson<T>(path: string): Promise<T> {
 
 export function listRuns(): Promise<RunSummary[]> {
   return getJson<RunSummary[]>("/api/runs");
+}
+
+export function getEvidence(runId: string, evidenceId: string): Promise<EvidenceDetail> {
+  return getJson<EvidenceDetail>(
+    `/api/runs/${encodeURIComponent(runId)}/evidence/${encodeURIComponent(evidenceId)}`
+  );
+}
+
+export function getLineage(runId: string, evidenceId: string): Promise<LineageGraph> {
+  return getJson<LineageGraph>(
+    `/api/runs/${encodeURIComponent(runId)}/lineage/${encodeURIComponent(evidenceId)}`
+  );
 }
