@@ -33,7 +33,14 @@ export function IntelligencePage({ runId: explicitRunId }: { runId?: string }) {
       </section>
       <section>
         <h2>Hypotheses</h2>
-        <ul>{hypotheses.data!.map((item) => <li key={item.id}>{item.statement} · {item.status}</li>)}</ul>
+        <ul>
+          {hypotheses.data!.map((item) => (
+            <li key={item.id}>
+              <span>{item.statement}</span>
+              <span> · {item.status}</span>
+            </li>
+          ))}
+        </ul>
       </section>
       <section>
         <h2>Briefs</h2>
