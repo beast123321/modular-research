@@ -15,6 +15,7 @@ from typing import Any
 
 
 _ALLOWED_PRICING_BASES = {"provider_default", "endpoint_explicit", "unknown"}
+_PROMOTABLE_SOURCE_STATUSES = {"COMPLETED", "COMPLETED_WITH_ERRORS"}
 _VERIFICATION_FIELDS = {
     "status",
     "verified_at",
@@ -74,6 +75,10 @@ def build_verification_manifest(report: dict, *, platform: str) -> dict:
             f"report platform mismatch: expected {requested_platform}, got {report_platform}"
         )
 
+    source_status = str(report.get("status") or "UNKNOWN").strip()
+    if source_status not in _PROMOTABLE_SOURCE_STATUSES:
+        raise ValueError(f"source status is not promotable: {source_status}")
+
     results = report.get("results")
     if not isinstance(results, list) or not results:
         raise ValueError("live-validation report must contain non-empty results")
@@ -83,6 +88,8 @@ def build_verification_manifest(report: dict, *, platform: str) -> dict:
         raise ValueError("live-validation report must carry explicit pricing_basis")
 
     calls = _validation_calls(report)
+    if len(results) != calls["attempted"]:
+        raise ValueError("result count does not match calls_attempted")
     verified_at = _parse_verified_at(report.get("generated_at"))
 
     promoted: set[str] = set()
@@ -110,7 +117,7 @@ def build_verification_manifest(report: dict, *, platform: str) -> dict:
         "schema_version": "1.0",
         "platform": requested_platform,
         "verified_at": verified_at,
-        "source_status": str(report.get("status") or "UNKNOWN"),
+        "source_status": source_status,
         "validation_calls": calls,
         "pricing_basis": pricing_basis,
         "promoted_capabilities": sorted(promoted),
