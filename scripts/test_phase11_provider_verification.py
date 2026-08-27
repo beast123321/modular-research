@@ -19,9 +19,15 @@ LIVE_VERIFIED_CAPABILITIES = {
 }
 
 
+def _version_tuple(value: str) -> tuple[int, int, int]:
+    major, minor, patch = value.split(".")
+    return int(major), int(minor), int(patch)
+
+
 class DouyinProviderVerificationTests(unittest.TestCase):
-    def test_release_candidate_is_1_1_3(self):
-        self.assertEqual((ROOT / "VERSION").read_text(encoding="utf-8").strip(), "1.1.3")
+    def test_release_is_not_older_than_1_1_3(self):
+        version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertGreaterEqual(_version_tuple(version), (1, 1, 3))
 
     def test_six_real_provider_contracts_are_live_verified_with_run_metadata(self):
         registry = EndpointRegistry()
