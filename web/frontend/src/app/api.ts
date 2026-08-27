@@ -1,4 +1,4 @@
-import type { CreatorDetail, CreatorSummary, EvidenceDetail, LineageGraph, MediaSummary, Page, RunSummary, VideoDetail, VideoSummary, VocSummary } from "./types";
+import type { BriefSummary, CreatorDetail, CreatorSummary, EvidenceDetail, FindingSummary, HypothesisSummary, InsightSummary, LineageGraph, MediaSummary, Page, PatternSummary, RunSummary, VideoDetail, VideoSummary, VocSummary } from "./types";
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path, { headers: { Accept: "application/json" } });
@@ -50,4 +50,24 @@ export function getVoc(runId: string): Promise<VocSummary> {
 
 export function listMedia(runId: string): Promise<MediaSummary[]> {
   return getJson<MediaSummary[]>(`/api/runs/${encodeURIComponent(runId)}/media`);
+}
+
+export function listFindings(runId: string): Promise<FindingSummary[]> {
+  return getJson<FindingSummary[]>(`/api/runs/${encodeURIComponent(runId)}/findings`);
+}
+
+export function listPatterns(runId: string): Promise<PatternSummary[]> {
+  return getJson<PatternSummary[]>(`/api/runs/${encodeURIComponent(runId)}/patterns`);
+}
+
+export function listInsights(runId: string): Promise<InsightSummary[]> {
+  return getJson<InsightSummary[]>(`/api/runs/${encodeURIComponent(runId)}/insights`);
+}
+
+export function listHypotheses(runId: string): Promise<HypothesisSummary[]> {
+  return getJson<HypothesisSummary[]>(`/api/runs/${encodeURIComponent(runId)}/hypotheses`);
+}
+
+export function listBriefs(runId: string): Promise<BriefSummary[]> {
+  return getJson<BriefSummary[]>(`/api/runs/${encodeURIComponent(runId)}/briefs`);
 }

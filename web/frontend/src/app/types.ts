@@ -138,3 +138,56 @@ export type MediaSummary = {
   transcript_count: number;
   creative_analysis_count: number;
 };
+
+export type FindingSummary = {
+  id: string;
+  finding_type: "OBSERVATION";
+  category: string;
+  statement: string;
+  support_count: number;
+  evidence_refs: string[];
+  metrics: Record<string, unknown>;
+};
+
+export type PatternSummary = {
+  id: string;
+  performance_metric: string;
+  pattern_field: string;
+  pattern_value: string;
+  lift: number | null;
+  top_support: number;
+  baseline_support: number;
+  evidence_refs: string[];
+};
+
+export type InsightSummary = {
+  id: string;
+  statement: string;
+  confidence: number;
+  analyzer_name: string;
+  analyzer_mode: string;
+  evidence_refs: string[];
+};
+
+export type HypothesisSummary = {
+  id: string;
+  statement: string;
+  objective: string;
+  status: string;
+  confidence: number;
+  analyzer_name: string;
+  analyzer_mode: string;
+  evidence_refs: string[];
+};
+
+export type BriefSummary = {
+  id: string;
+  hypothesis_id: string;
+  objective: string;
+  target_audience: string | null;
+  confidence: number;
+  analyzer_name: string;
+  analyzer_mode: string;
+  evidence_refs: string[];
+  timeline: unknown[];
+};
