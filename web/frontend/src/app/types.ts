@@ -107,3 +107,15 @@ export type CreatorSummary = {
   run_video_count: number | null;
   evidence_refs: string[];
 };
+
+export type CreatorVideo = {
+  video_id: string;
+  caption: string | null;
+  views: number | null;
+  likes: number | null;
+  shares: number | null;
+};
+
+export type CreatorDetail = CreatorSummary & {
+  videos: CreatorVideo[];
+};
