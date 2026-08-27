@@ -97,3 +97,13 @@ export type VideoDetail = {
   discoveries: VideoDiscovery[];
   comments: VideoComment[];
 };
+
+export type CreatorSummary = {
+  creator_id: string;
+  nickname: string | null;
+  unique_id: string | null;
+  followers: number | null;
+  baseline_views: number | null;
+  run_video_count: number | null;
+  evidence_refs: string[];
+};
