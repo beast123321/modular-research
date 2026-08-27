@@ -28,6 +28,17 @@ from research_executor_v2 import (
 )
 
 
+LIVE_VALIDATION_CALL_CEILINGS = {"douyin": 6, "tiktok": 12}
+
+
+def clamp_call_ceiling(platform: str, requested: int | None) -> int:
+    key = str(platform).strip().lower()
+    ceiling = LIVE_VALIDATION_CALL_CEILINGS[key]
+    if requested is None:
+        return ceiling
+    return max(0, min(ceiling, int(requested)))
+
+
 @dataclass(frozen=True)
 class ProbeSpec:
     capability: str
@@ -186,11 +197,11 @@ class LiveValidationRunner:
         skip_dns_check: bool = False,
     ) -> dict[str, Any]:
         platform = str(platform).strip().lower()
+        max_calls = clamp_call_ceiling(platform, max_calls)
         normalizer = _normalizer_for(platform)
         output_dir = Path(output_dir)
         raw_dir = output_dir / "raw"
         raw_dir.mkdir(parents=True, exist_ok=True)
-        max_calls = max(0, int(max_calls))
         estimated = round(max_calls * float(unit_price_usd), 6)
         base_report: dict[str, Any] = {
             "schema_version": "1.0",
@@ -496,11 +507,10 @@ def main() -> int:
             topic=args.topic,
             reference_aweme_id=args.reference_aweme_id,
         )
-        max_calls = 6 if args.max_calls is None else max(0, min(6, args.max_calls))
     else:
         probes = build_default_probes(topic=args.topic, market=args.market)
-        max_calls = 15 if args.max_calls is None else args.max_calls
 
+    max_calls = clamp_call_ceiling(args.platform, args.max_calls)
     unit_price = 0.001
     plan = {
         "execution_status": "PLAN_ONLY" if not args.execute else "READY",
