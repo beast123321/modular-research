@@ -64,3 +64,36 @@ export type VideoSummary = {
   engagement_rate: number | null;
   evidence_refs: string[];
 };
+
+export type VideoSnapshot = {
+  id: number | string;
+  views: number | null;
+  captured_at: string | null;
+};
+
+export type VideoComment = {
+  comment_id: string;
+  text: string | null;
+  like_count: number | null;
+};
+
+export type VideoDiscovery = {
+  id: number | string;
+  source_type: string | null;
+  source_rank: number | null;
+};
+
+export type VideoDetail = {
+  video_id: string;
+  creator_id: string | null;
+  caption: string | null;
+  creator_nickname: string | null;
+  views: number | null;
+  likes: number | null;
+  shares: number | null;
+  engagement_rate: number | null;
+  evidence_refs: string[];
+  snapshots: VideoSnapshot[];
+  discoveries: VideoDiscovery[];
+  comments: VideoComment[];
+};
