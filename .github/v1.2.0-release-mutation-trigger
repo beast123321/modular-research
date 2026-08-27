@@ -5,3 +5,4 @@ VALIDATION_CALLS=12/12
 PRICING_BASIS=provider_default
 APPLY_SCOPE=references/endpoints.json,references/verifications/tiktok-provider-verification-v1.2.0.json
 RETRY_AFTER_YAML_PARSE_FIX=1
+RETRY_AFTER_SCOPE_GUARD_FIX=1
