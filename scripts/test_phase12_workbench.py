@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -44,20 +45,16 @@ class Phase12RunRepositoryTests(unittest.TestCase):
             root = Path(td); build_fixture_run(root, "run_fixture"); (root / "notes").mkdir()
             repo = RunRepository(root)
             self.assertEqual(repo.discover_runs(), ["run_fixture"])
-            with self.assertRaises(ValueError):
-                repo.run_dir("../escape")
+            with self.assertRaises(ValueError): repo.run_dir("../escape")
 
     def test_sqlite_connection_is_query_only(self):
         td, repo = _fixture_repo()
         try:
             conn = repo.open_db("run_fixture")
             try:
-                with self.assertRaises(sqlite3.OperationalError):
-                    conn.execute("CREATE TABLE forbidden(x INTEGER)")
-            finally:
-                conn.close()
-        finally:
-            td.cleanup()
+                with self.assertRaises(sqlite3.OperationalError): conn.execute("CREATE TABLE forbidden(x INTEGER)")
+            finally: conn.close()
+        finally: td.cleanup()
 
     def test_summary_uses_artifacts_and_never_invents_cost(self):
         from web.backend.run_summary import build_run_summary
@@ -68,8 +65,7 @@ class Phase12RunRepositoryTests(unittest.TestCase):
             self.assertEqual(summary.video_count, 1)
             self.assertEqual(summary.provider_calls_attempted, 2)
             self.assertIsNone(summary.actual_estimated_cost_usd)
-        finally:
-            td.cleanup()
+        finally: td.cleanup()
 
 
 class Phase12FlowTests(unittest.TestCase):
@@ -77,13 +73,11 @@ class Phase12FlowTests(unittest.TestCase):
         from web.backend.flow_service import build_stage_flow
         td, repo = _fixture_repo()
         try:
-            flow = build_stage_flow(repo, "run_fixture")
-            by_name = {row.name: row for row in flow}
+            by_name = {row.name: row for row in build_stage_flow(repo, "run_fixture")}
             self.assertEqual(by_name["REFERENCE_SEED"].status, "COMPLETED")
             self.assertEqual(by_name["REFERENCE_SEED"].status_basis, "execution")
             self.assertEqual(by_name["VIDEO_UNDERSTANDING"].status, "PLANNED")
-        finally:
-            td.cleanup()
+        finally: td.cleanup()
 
     def test_execution_summary_separates_plan_and_actual(self):
         from web.backend.flow_service import build_execution_summary
@@ -93,8 +87,7 @@ class Phase12FlowTests(unittest.TestCase):
             self.assertEqual(result.expected_requests, 2)
             self.assertEqual(result.calls_attempted, 2)
             self.assertIsNone(result.actual_estimated_cost_usd)
-        finally:
-            td.cleanup()
+        finally: td.cleanup()
 
 
 class Phase12EntityTests(unittest.TestCase):
@@ -105,10 +98,8 @@ class Phase12EntityTests(unittest.TestCase):
             self.assertEqual(page.total, 1)
             self.assertEqual(page.items[0]["video_id"], "video_fixture")
             self.assertEqual(page.items[0]["views"], 10000)
-            with self.assertRaises(ValueError):
-                repo.list_videos("run_fixture", page=1, page_size=20, sort="DROP TABLE videos", order="desc")
-        finally:
-            td.cleanup()
+            with self.assertRaises(ValueError): repo.list_videos("run_fixture", page=1, page_size=20, sort="DROP TABLE videos", order="desc")
+        finally: td.cleanup()
 
     def test_voc_uses_real_comment_denominator(self):
         td, repo = _fixture_repo()
@@ -118,8 +109,29 @@ class Phase12EntityTests(unittest.TestCase):
             labels = {row["label"]: row for row in voc["labels"]}
             self.assertEqual(labels["authenticity"]["count"], 1)
             self.assertEqual(labels["authenticity"]["share"], 1.0)
-        finally:
-            td.cleanup()
+        finally: td.cleanup()
+
+
+class Phase12EvidenceTests(unittest.TestCase):
+    def test_evidence_detail_redacts_stored_secret_fields_again(self):
+        from web.backend.lineage_service import get_evidence
+        td, repo = _fixture_repo()
+        try:
+            detail = get_evidence(repo, "run_fixture", "raw:fixture:0001")
+            serialized = json.dumps(detail)
+            self.assertNotIn("Bearer fixture-secret-must-redact", serialized)
+            self.assertNotIn("fixture-api-key-must-redact", serialized)
+        finally: td.cleanup()
+
+    def test_lineage_contains_only_stored_references(self):
+        from web.backend.lineage_service import build_lineage
+        td, repo = _fixture_repo()
+        try:
+            graph = build_lineage(repo, "run_fixture", "raw:fixture:0001")
+            relations = {(e.source_type, e.target_type, e.relation) for e in graph.edges}
+            self.assertIn(("raw_evidence", "video", "normalized_as"), relations)
+            self.assertFalse(any(e.target_id == "invented" for e in graph.edges))
+        finally: td.cleanup()
 
 
 if __name__ == "__main__":
