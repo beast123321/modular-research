@@ -88,6 +88,23 @@ class RunRepository:
         except (TypeError, ValueError, json.JSONDecodeError):
             return fallback
 
+    @classmethod
+    def _decode_row_json(cls, row: dict[str, Any]) -> dict[str, Any]:
+        out = dict(row)
+        mappings = {
+            "evidence_refs_json": ("evidence_refs", []),
+            "metrics_json": ("metrics", {}),
+            "timeline_json": ("timeline", []),
+            "confidence_json": ("confidence", {}),
+            "cohort_json": ("cohort", {}),
+            "labels_json": ("labels", []),
+            "matched_terms_json": ("matched_terms", []),
+        }
+        for source, (target, fallback) in mappings.items():
+            if source in out:
+                out[target] = cls._decode_json(out.pop(source), fallback)
+        return out
+
     def count_table(self, run_id: str, table: str, *, run_scoped: bool = False) -> int | None:
         try:
             conn = self.open_db(run_id)
@@ -255,3 +272,85 @@ class RunRepository:
             labels=[{"label":label,"count":count,"share":(count/denominator if denominator else None)} for label,count in sorted(counter.items(),key=lambda x:(-x[1],x[0]))]
             return {"denominator":denominator,"labels":labels}
         finally: conn.close()
+
+    def list_media(self, run_id: str) -> list[dict[str, Any]]:
+        conn = self.open_db(run_id)
+        try:
+            if not self.table_exists(conn, "media_assets"):
+                return []
+            rows = conn.execute(
+                """SELECT a.*,
+                    (SELECT COUNT(*) FROM media_keyframes k WHERE k.run_id=a.run_id AND k.video_id=a.video_id) AS keyframe_count,
+                    (SELECT COUNT(*) FROM transcript_segments t WHERE t.run_id=a.run_id AND t.video_id=a.video_id) AS transcript_count,
+                    (SELECT COUNT(*) FROM creative_analysis c WHERE c.run_id=a.run_id AND c.video_id=a.video_id) AS creative_analysis_count
+                    FROM media_assets a WHERE a.run_id=? ORDER BY a.video_id""",
+                (run_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+        finally:
+            conn.close()
+
+    def get_media(self, run_id: str, video_id: str) -> dict[str, Any]:
+        conn = self.open_db(run_id)
+        try:
+            asset = None
+            if self.table_exists(conn, "media_assets"):
+                row = conn.execute("SELECT * FROM media_assets WHERE run_id=? AND video_id=?", (run_id, video_id)).fetchone()
+                asset = dict(row) if row is not None else None
+            keyframes: list[dict[str, Any]] = []
+            if self.table_exists(conn, "media_keyframes"):
+                keyframes = [self._decode_row_json(dict(row)) for row in conn.execute("SELECT * FROM media_keyframes WHERE run_id=? AND video_id=? ORDER BY timestamp_sec,id", (run_id, video_id)).fetchall()]
+            transcripts: list[dict[str, Any]] = []
+            if self.table_exists(conn, "transcript_segments"):
+                transcripts = [self._decode_row_json(dict(row)) for row in conn.execute("SELECT * FROM transcript_segments WHERE run_id=? AND video_id=? ORDER BY COALESCE(start_sec,0),id", (run_id, video_id)).fetchall()]
+            creative: list[dict[str, Any]] = []
+            if self.table_exists(conn, "creative_analysis"):
+                creative = [self._decode_row_json(dict(row)) for row in conn.execute("SELECT * FROM creative_analysis WHERE run_id=? AND video_id=? ORDER BY analyzer_name", (run_id, video_id)).fetchall()]
+            return {"video_id": video_id, "asset": asset, "keyframes": keyframes, "transcripts": transcripts, "creative_analysis": creative}
+        finally:
+            conn.close()
+
+    def _list_run_table(self, run_id: str, table: str, order_column: str) -> list[dict[str, Any]]:
+        conn = self.open_db(run_id)
+        try:
+            if not self.table_exists(conn, table):
+                return []
+            rows = conn.execute(f'SELECT * FROM "{table}" WHERE run_id=? ORDER BY "{order_column}"', (run_id,)).fetchall()
+            return [self._decode_row_json(dict(row)) for row in rows]
+        finally:
+            conn.close()
+
+    def list_findings(self, run_id: str) -> list[dict[str, Any]]:
+        return self._list_run_table(run_id, "findings", "created_at")
+
+    def list_patterns(self, run_id: str) -> list[dict[str, Any]]:
+        return self._list_run_table(run_id, "creative_patterns", "created_at")
+
+    def list_insights(self, run_id: str) -> list[dict[str, Any]]:
+        return self._list_run_table(run_id, "insights", "created_at")
+
+    def list_hypotheses(self, run_id: str) -> list[dict[str, Any]]:
+        return self._list_run_table(run_id, "creative_hypotheses", "created_at")
+
+    def list_briefs(self, run_id: str) -> list[dict[str, Any]]:
+        return self._list_run_table(run_id, "media_briefs", "created_at")
+
+    def get_report(self, run_id: str) -> dict[str, Any]:
+        reports_dir = self.artifact_path(run_id, "reports")
+        for name in ("final_report.md", "research_report.md", "report.md"):
+            path = (reports_dir / name).resolve()
+            if path.is_file():
+                return {
+                    "persisted_final_report": True,
+                    "artifact": name,
+                    "markdown": path.read_text(encoding="utf-8"),
+                    "notice": None,
+                }
+        known = [name for name in ("metrics.json", "rankings.json", "voc.json", "findings.json", "pattern_report.json", "synthesis_request.json") if (reports_dir / name).is_file()]
+        return {
+            "persisted_final_report": False,
+            "artifact": None,
+            "markdown": None,
+            "notice": "Final report not persisted for this run",
+            "available_structured_artifacts": known,
+        }
