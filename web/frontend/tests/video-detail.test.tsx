@@ -31,7 +31,6 @@ describe("VideoDetailPage", () => {
             creator_nickname: "Fixture Creator",
             views: 1500,
             likes: 150,
-            comments: 12,
             shares: 8,
             engagement_rate: 0.113,
             evidence_refs: ["run_fixture:raw:0001"],
