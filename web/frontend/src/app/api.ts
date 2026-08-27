@@ -1,4 +1,4 @@
-import type { EvidenceDetail, LineageGraph, RunSummary } from "./types";
+import type { EvidenceDetail, LineageGraph, Page, RunSummary, VideoSummary } from "./types";
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path, { headers: { Accept: "application/json" } });
@@ -22,4 +22,8 @@ export function getLineage(runId: string, evidenceId: string): Promise<LineageGr
   return getJson<LineageGraph>(
     `/api/runs/${encodeURIComponent(runId)}/lineage/${encodeURIComponent(evidenceId)}`
   );
+}
+
+export function listVideos(runId: string): Promise<Page<VideoSummary>> {
+  return getJson<Page<VideoSummary>>(`/api/runs/${encodeURIComponent(runId)}/videos`);
 }

@@ -1,3 +1,10 @@
+export type Page<T> = {
+  items: T[];
+  page: number;
+  page_size: number;
+  total: number;
+};
+
 export type RunSummary = {
   run_id: string;
   topic: string | null;
@@ -43,4 +50,17 @@ export type LineageEdge = {
 export type LineageGraph = {
   root_id: string;
   edges: LineageEdge[];
+};
+
+export type VideoSummary = {
+  video_id: string;
+  creator_id: string | null;
+  caption: string | null;
+  creator_nickname: string | null;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  engagement_rate: number | null;
+  evidence_refs: string[];
 };
