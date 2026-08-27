@@ -1,0 +1,81 @@
+name: v1.2.0 TikTok provider verification
+
+on:
+  push:
+    branches:
+      - release/v1.2.0-tiktok-provider-verification
+    paths:
+      - .github/v1.2.0-live-validation-trigger
+
+permissions:
+  contents: read
+
+jobs:
+  live-provider-verification:
+    if: github.event.head_commit.message == 'chore: trigger approved v1.2.0 TikTok provider verification'
+    runs-on: ubuntu-latest
+    env:
+      TIKHUB_API_KEY: ${{ secrets.TIKHUB_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Require configured TikHub secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${TIKHUB_API_KEY:-}" ]; then
+            echo '::error::TIKHUB_API_KEY repository secret is not configured for this workflow.'
+            exit 1
+          fi
+      - name: Execute approved bounded TikTok validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/modular-research-v1.2.0-live-validation"
+          rm -rf "$OUT"
+          PYTHONPATH=scripts python scripts/live_validation.py \
+            --topic 'standing desk' \
+            --platform tiktok \
+            --market US \
+            --max-calls 12 \
+            --max-budget-usd 0.012 \
+            --execute \
+            --yes \
+            --out "$OUT"
+          PYTHONPATH=scripts python scripts/provider_verification.py \
+            --report "$OUT/live-validation.json" \
+            --platform tiktok \
+            --manifest-out "$OUT/verification-manifest.json"
+          python - "$OUT" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+
+          out = Path(sys.argv[1])
+          report = json.loads((out / 'live-validation.json').read_text(encoding='utf-8'))
+          manifest = json.loads((out / 'verification-manifest.json').read_text(encoding='utf-8'))
+          assert report['platform'] == 'tiktok'
+          assert report['call_ceiling'] == 12
+          assert report['calls_attempted'] <= 12
+          assert report['estimated_max_cost_usd'] <= 0.012
+          assert report['pricing_basis'] == 'provider_default'
+          assert report['status'] in {'COMPLETED', 'COMPLETED_WITH_ERRORS'}
+          assert manifest['platform'] == 'tiktok'
+          assert manifest['validation_calls']['attempted'] == report['calls_attempted']
+          serialized = json.dumps({'report': report, 'manifest': manifest}, ensure_ascii=False)
+          assert 'TIKHUB_API_KEY' not in serialized
+          PY
+          rm -rf "$OUT/raw"
+      - name: Upload sanitized verification evidence only
+        uses: actions/upload-artifact@v4
+        with:
+          name: v1.2.0-tiktok-provider-verification-evidence
+          path: |
+            ${{ runner.temp }}/modular-research-v1.2.0-live-validation/live-validation.json
+            ${{ runner.temp }}/modular-research-v1.2.0-live-validation/verification-manifest.json
+          if-no-files-found: error
+          retention-days: 1
