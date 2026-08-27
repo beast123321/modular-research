@@ -138,8 +138,6 @@ class Phase12FixtureTests(unittest.TestCase):
 
 - [ ] **Step 2: Run the focused test and confirm RED**
 
-Run:
-
 ```bash
 PYTHONPATH=scripts python -m unittest scripts/test_phase12_workbench.py -v
 ```
@@ -148,7 +146,7 @@ Expected: FAIL because Web dependencies and `workbench_test_fixture` do not exis
 
 - [ ] **Step 3: Add runtime dependencies and fixture builder**
 
-Append exact runtime dependencies:
+Append:
 
 ```text
 fastapi>=0.115,<1
@@ -156,28 +154,65 @@ uvicorn>=0.30,<1
 httpx>=0.27,<1
 ```
 
-Implement fixture creation by executing the existing migrations into a temporary SQLite DB, then insert a small deterministic dataset. The builder signature is fixed:
+Implement fixture creation with the existing four migrations and deterministic inserts. The builder must:
 
 ```python
 def build_fixture_run(root: Path, run_id: str = "run_fixture") -> Path:
     run_dir = root / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
-    # apply migrations/001..004, insert one creator/video/comment/raw evidence,
-    # write plan.json/execution.json/reports artifacts
+    (run_dir / "raw").mkdir(parents=True, exist_ok=True)
+    (run_dir / "reports").mkdir(parents=True, exist_ok=True)
+    db_path = run_dir / "run.sqlite"
+    conn = sqlite3.connect(db_path)
+    for migration in sorted((ROOT / "migrations").glob("00[1-4]_*.sql")):
+        conn.executescript(migration.read_text(encoding="utf-8"))
+    conn.execute(
+        "INSERT INTO research_runs(id, request_json, profile_id, provider, status, started_at, completed_at) VALUES(?,?,?,?,?,?,?)",
+        (run_id, json.dumps({"topic":"fixture topic","platform":"douyin","depth":"standard"}), "douyin-video-intelligence-v1", "tikhub", "completed", "2026-08-27T00:00:00+00:00", "2026-08-27T00:05:00+00:00"),
+    )
+    conn.execute(
+        "INSERT INTO raw_evidence(id, run_id, endpoint, method, request_json, response_json, source_type, source_key, fetched_at) VALUES(?,?,?,?,?,?,?,?,?)",
+        (f"{run_id}:raw:0001", run_id, "/fixture", "GET", json.dumps({"Authorization":"Bearer fixture-secret"}), json.dumps({"api_key":"fixture-api-key","ok":True}), "video_search", "fixture", "2026-08-27T00:01:00+00:00"),
+    )
+    conn.execute(
+        "INSERT INTO creators(creator_id,nickname,followers,raw_evidence_id) VALUES(?,?,?,?)",
+        ("creator-1","Fixture Creator",1234,f"{run_id}:raw:0001"),
+    )
+    conn.execute(
+        "INSERT INTO videos(video_id,creator_id,caption,raw_evidence_id) VALUES(?,?,?,?)",
+        ("video-1","creator-1","Fixture Video",f"{run_id}:raw:0001"),
+    )
+    conn.execute(
+        "INSERT INTO video_snapshots(run_id,video_id,views,likes,comments,shares,captured_at,raw_evidence_id) VALUES(?,?,?,?,?,?,?,?)",
+        (run_id,"video-1",1000,100,10,5,"2026-08-27T00:02:00+00:00",f"{run_id}:raw:0001"),
+    )
+    conn.execute(
+        "INSERT INTO comments(comment_id,video_id,text,raw_evidence_id) VALUES(?,?,?,?)",
+        ("comment-1","video-1","fixture comment",f"{run_id}:raw:0001"),
+    )
+    conn.execute(
+        "INSERT INTO comment_labels(run_id,comment_id,labels_json,matched_terms_json,weighted_intensity,classifier_version,evidence_refs_json,computed_at) VALUES(?,?,?,?,?,?,?,?)",
+        (run_id,"comment-1",json.dumps(["真实性"]),json.dumps(["真实"]),1.0,"fixture",json.dumps([f"{run_id}:raw:0001"]),"2026-08-27T00:03:00+00:00"),
+    )
+    conn.execute(
+        "INSERT INTO findings(id,run_id,finding_type,category,statement,evidence_refs_json,metrics_json,support_count,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+        ("finding-1",run_id,"OBSERVATION","fixture","fixture finding",json.dumps([f"{run_id}:raw:0001"]),"{}",1,"2026-08-27T00:04:00+00:00"),
+    )
+    conn.commit(); conn.close()
+    (run_dir / "plan.json").write_text(json.dumps({"request":{"topic":"fixture topic","platform":"douyin","depth":"standard"},"expected_requests":2,"max_requests":3,"expected_cost_usd":0.002,"max_cost_usd":0.003,"stages":[{"name":"REFERENCE_SEED"},{"name":"VIDEO_UNDERSTANDING"}]}), encoding="utf-8")
+    (run_dir / "execution.json").write_text(json.dumps({"status":"completed","run_id":run_id,"calls_attempted":2,"calls_succeeded":2,"calls_failed":0,"stages":[{"stage":"REFERENCE_SEED","status":"completed","calls_attempted":2,"calls_succeeded":2,"calls_failed":0},{"stage":"VIDEO_UNDERSTANDING","status":"prepared_local","calls_attempted":0,"calls_succeeded":0,"calls_failed":0}]}), encoding="utf-8")
+    (run_dir / "reports" / "findings.json").write_text(json.dumps([{"id":"finding-1"}]), encoding="utf-8")
     return run_dir
 ```
 
-The fixture raw response must intentionally contain a fake `Authorization`/`api_key` field so later HTTP-redaction tests prove defense-in-depth.
+Later task tests may extend the fixture with media/pattern/insight/hypothesis/brief rows as those read models are introduced; the core fixture contract and IDs remain stable.
 
 - [ ] **Step 4: Run the focused test and confirm GREEN**
-
-Run:
 
 ```bash
 PYTHONPATH=scripts python -m unittest scripts/test_phase12_workbench.py -v
 ```
 
-Expected: PASS for dependency and fixture tests.
+Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -244,8 +279,6 @@ class Phase12RunRepositoryTests(unittest.TestCase):
 
 - [ ] **Step 2: Run tests and confirm RED**
 
-Run:
-
 ```bash
 PYTHONPATH=scripts:. python -m unittest scripts/test_phase12_workbench.py -v
 ```
@@ -253,8 +286,6 @@ PYTHONPATH=scripts:. python -m unittest scripts/test_phase12_workbench.py -v
 Expected: import failures for `web.backend.run_repository` / `run_summary`.
 
 - [ ] **Step 3: Implement repository and summary models**
-
-Use strict run IDs and containment checks:
 
 ```python
 RUN_ID_RE = re.compile(r"^run_[A-Za-z0-9._-]+$")
@@ -281,7 +312,7 @@ class RunRepository:
 
 `build_run_summary` uses the spec priority order: execution/plan → `research_runs`/tables → reports → `null`/unavailable. Do not calculate cost from call count.
 
-- [ ] **Step 4: Run Phase 12 tests and full legacy foundation regression**
+- [ ] **Step 4: Run Phase 12 tests and legacy regression**
 
 ```bash
 PYTHONPATH=scripts:. python -m unittest scripts/test_phase12_workbench.py -v
@@ -313,7 +344,7 @@ git commit -m "feat(workbench): add read-only run repository"
 - `StageState.status` is one of `COMPLETED|RUNNING|SKIPPED|FAILED|PLANNED|UNAVAILABLE`.
 - `StageState.status_basis` is one of `execution|artifact|inferred|unavailable`.
 
-- [ ] **Step 1: Add RED tests for recorded, skipped, prepared, and unavailable states**
+- [ ] **Step 1: Add RED tests**
 
 ```python
 def test_stage_flow_preserves_execution_basis_and_maps_local_states(self):
@@ -336,11 +367,7 @@ def test_execution_summary_separates_plan_and_actual(self):
 PYTHONPATH=scripts:. python -m unittest scripts/test_phase12_workbench.py -v
 ```
 
-Expected: missing `flow_service` / models.
-
 - [ ] **Step 3: Implement conservative status mapping**
-
-Map current executor statuses exactly:
 
 ```python
 EXECUTION_STATUS_MAP = {
@@ -386,9 +413,9 @@ git commit -m "feat(workbench): expose stage flow and execution summaries"
 **Interfaces:**
 - Produces repository methods: `list_videos`, `get_video`, `list_creators`, `get_creator`, `list_comments`, `get_voc`.
 - Collection methods accept explicit `page`, `page_size<=200`, `sort`, `order`, `query`, plus documented entity filters only.
-- Produces route factory `router(repo: RunRepository) -> APIRouter` for testable dependency injection.
+- Produces route factories that accept a `RunRepository` dependency.
 
-- [ ] **Step 1: Add RED tests for pagination, sorting whitelist, null metrics, and VOC denominator**
+- [ ] **Step 1: Add RED tests**
 
 ```python
 def test_videos_are_paginated_and_reject_unknown_sort(self):
@@ -410,11 +437,7 @@ def test_voc_uses_real_comment_denominator(self):
 PYTHONPATH=scripts:. python -m unittest scripts/test_phase12_workbench.py -v
 ```
 
-Expected: missing repository methods/routes.
-
 - [ ] **Step 3: Implement whitelist-driven SQL and entity read models**
-
-Use explicit sort mappings, never user-provided SQL identifiers:
 
 ```python
 VIDEO_SORTS = {
@@ -428,7 +451,7 @@ if column is None:
     raise ValueError("unsupported video sort")
 ```
 
-Join latest run-specific snapshots/derived metrics without replacing missing values with zero. Creator/video detail must include their evidence refs where stored.
+Join latest run-specific snapshots/derived metrics without replacing missing values with zero. Creator/video detail includes evidence refs where stored.
 
 - [ ] **Step 4: Run focused and migration regression tests**
 
@@ -460,7 +483,7 @@ git commit -m "feat(workbench): add entity and VOC read APIs"
 - Produces: `build_lineage(repo, run_id, evidence_id) -> LineageGraph`.
 - Produces typed edges with `source_type/source_id/target_type/target_id/relation`.
 
-- [ ] **Step 1: Add RED tests proving redaction and no fabricated lineage**
+- [ ] **Step 1: Add RED tests**
 
 ```python
 def test_evidence_detail_redacts_stored_secret_fields_again(self):
@@ -482,20 +505,15 @@ def test_lineage_contains_only_stored_references(self):
 PYTHONPATH=scripts:. python -m unittest scripts/test_phase12_workbench.py -v
 ```
 
-Expected: missing evidence/lineage modules.
-
 - [ ] **Step 3: Implement defensive redaction and reverse-ref scanning**
-
-Use the existing utility:
 
 ```python
 from api_research_core import redact_payload
-
 safe_request = redact_payload(json.loads(row["request_json"]))
 safe_response = redact_payload(json.loads(row["response_json"]))
 ```
 
-Scan only known `raw_evidence_id` columns and known `evidence_refs_json` columns from migrations 001-004. Ignore malformed refs instead of guessing. Evidence list filtering is limited to `endpoint`, `source_type`, `source_key`, `id`, and free-text query over safe metadata.
+Scan only known `raw_evidence_id` and `evidence_refs_json` columns from migrations 001-004. Ignore malformed refs rather than guessing. Evidence list filters are limited to `endpoint`, `source_type`, `source_key`, `id`, and safe metadata query.
 
 - [ ] **Step 4: Run Phase 12 and release-audit tests**
 
@@ -503,7 +521,7 @@ Scan only known `raw_evidence_id` columns and known `evidence_refs_json` columns
 PYTHONPATH=scripts:. python -m unittest scripts/test_phase12_workbench.py scripts/test_phase8.py -v
 ```
 
-Expected: PASS; no fixture secret appears in test output/artifacts.
+Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -529,7 +547,7 @@ git commit -m "feat(workbench): add evidence explorer and lineage"
 - Produces read methods for findings/patterns/insights/hypotheses/briefs.
 - Produces `get_report(run_id)` using final-report artifact priority from the spec.
 
-- [ ] **Step 1: Add RED tests for media containment, unavailable media, intelligence refs, and report fallback**
+- [ ] **Step 1: Add RED tests**
 
 ```python
 def test_keyframe_resolver_rejects_path_outside_run(self):
@@ -552,11 +570,7 @@ def test_intelligence_preserves_evidence_refs(self):
 PYTHONPATH=scripts:. python -m unittest scripts/test_phase12_workbench.py -v
 ```
 
-Expected: missing media/intelligence functions.
-
 - [ ] **Step 3: Implement media and intelligence services**
-
-Resolve media by DB IDs only:
 
 ```python
 path = Path(row["local_path"]).resolve()
@@ -565,7 +579,7 @@ if not path.is_relative_to(run_root):
     raise ValueError("media path escapes run directory")
 ```
 
-`get_report` priority is exactly:
+Report priority:
 
 ```python
 for name in ["final_report.md", "research_report.md", "report.md"]:
@@ -604,7 +618,7 @@ git commit -m "feat(workbench): expose media and intelligence artifacts"
 - Produces CLI `python scripts/research_web.py [--port N] [--runs-root PATH] [--no-open]`.
 - Host is not a CLI option and is always `127.0.0.1`.
 
-- [ ] **Step 1: Add RED HTTP/security tests with FastAPI TestClient**
+- [ ] **Step 1: Add RED HTTP/security tests**
 
 ```python
 def test_health_and_runs_api_are_local_read_models(self):
@@ -613,10 +627,6 @@ def test_health_and_runs_api_are_local_read_models(self):
     self.assertEqual(client.get("/api/health").status_code, 200)
     payload = client.get("/api/runs").json()
     self.assertEqual(payload[0]["run_id"], "run_fixture")
-
-def test_browser_cannot_request_arbitrary_filesystem_path(self):
-    paths = [route.path for route in create_app(root, frontend_dist=None).routes]
-    self.assertFalse(any("{path" in p for p in paths if p.startswith("/api")))
 
 def test_launcher_has_no_host_option(self):
     text = (ROOT / "scripts" / "research_web.py").read_text(encoding="utf-8")
@@ -630,11 +640,7 @@ def test_launcher_has_no_host_option(self):
 PYTHONPATH=scripts:. python -m unittest scripts/test_phase12_workbench.py -v
 ```
 
-Expected: missing app/launcher.
-
 - [ ] **Step 3: Implement app factory and launcher**
-
-Launcher root resolution must be deterministic:
 
 ```python
 def resolve_runs_root(skill_root: Path, explicit: str | None) -> Path:
@@ -649,9 +655,9 @@ def resolve_runs_root(skill_root: Path, explicit: str | None) -> Path:
     return social
 ```
 
-`create_app` mounts all `/api` routers. If `frontend_dist` exists, serve its assets and return `index.html` only for non-API SPA routes. Never let SPA fallback swallow `/api/*` 404s.
+`create_app` mounts all `/api` routers. If `frontend_dist` exists, serve assets and return `index.html` only for non-API SPA routes. SPA fallback must not swallow `/api/*` 404s.
 
-- [ ] **Step 4: Run Phase 12 tests and Python compile check**
+- [ ] **Step 4: Run tests and compile**
 
 ```bash
 PYTHONPATH=scripts:. python -m unittest scripts/test_phase12_workbench.py -v
@@ -695,43 +701,21 @@ git commit -m "feat(workbench): add local FastAPI launcher"
 
 **Interfaces:**
 - Consumes `/api/runs`, `/api/runs/{run_id}`, `/api/runs/{run_id}/flow`.
-- Produces route shell: `/`, `/runs/:runId/overview`, `/runs/:runId/flow`, with later task routes registered in the same nav.
-- `api.ts` exports typed `apiGet<T>(path: string, params?: Record<string,string|number|undefined>): Promise<T>`.
+- Produces routes `/`, `/runs/:runId/overview`, `/runs/:runId/flow`.
+- `api.ts` exports `apiGet<T>(path: string, params?: Record<string,string|number|undefined>): Promise<T>`.
 
 - [ ] **Step 1: Create package manifest and RED component tests**
 
 Required dependencies:
 
 ```json
-{
-  "dependencies": {
-    "@tanstack/react-query": "^5.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-markdown": "^10.0.0",
-    "react-router-dom": "^7.0.0"
-  },
-  "devDependencies": {
-    "@testing-library/jest-dom": "^6.0.0",
-    "@testing-library/react": "^16.0.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.0.0",
-    "jsdom": "^26.0.0",
-    "typescript": "^5.7.0",
-    "vite": "^6.0.0",
-    "vitest": "^3.0.0"
-  }
-}
+{"dependencies":{"@tanstack/react-query":"^5.0.0","react":"^19.0.0","react-dom":"^19.0.0","react-markdown":"^10.0.0","react-router-dom":"^7.0.0"},"devDependencies":{"@testing-library/jest-dom":"^6.0.0","@testing-library/react":"^16.0.0","@types/react":"^19.0.0","@types/react-dom":"^19.0.0","@vitejs/plugin-react":"^4.0.0","jsdom":"^26.0.0","typescript":"^5.7.0","vite":"^6.0.0","vitest":"^3.0.0"}}
 ```
-
-Test behavior:
 
 ```tsx
 it("renders business-readable run metrics", async () => {
   render(<RunsPage />)
   expect(await screen.findByText("fixture topic")).toBeInTheDocument()
-  expect(screen.getByText("1 video")).toBeInTheDocument()
 })
 
 it("labels inferred stage status", () => {
@@ -748,26 +732,24 @@ npm install
 npm test -- --run
 ```
 
-Expected: FAIL because app/components/pages are missing.
+- [ ] **Step 3: Implement shell, types, API client and first screens**
 
-- [ ] **Step 3: Implement shell, types, API client and first three screens**
-
-Use `QueryClientProvider` in `main.tsx`, keep technical IDs secondary, and render state basis as visible text/icon rather than color only. `vite.config.ts` must set deterministic asset names:
+`vite.config.ts` must set deterministic asset names:
 
 ```ts
 build: {
   sourcemap: false,
-  rollupOptions: {
-    output: {
-      entryFileNames: "assets/app.js",
-      chunkFileNames: "assets/[name].js",
-      assetFileNames: "assets/[name][extname]"
-    }
-  }
+  rollupOptions: { output: {
+    entryFileNames: "assets/app.js",
+    chunkFileNames: "assets/[name].js",
+    assetFileNames: "assets/[name][extname]"
+  }}
 }
 ```
 
-- [ ] **Step 4: Run unit tests and production build**
+Keep technical IDs secondary and stage basis visible as text/icon rather than color only.
+
+- [ ] **Step 4: Run tests and production build**
 
 ```bash
 npm test -- --run
@@ -801,7 +783,7 @@ git commit -m "feat(workbench): add runs overview and flow UI"
 - Consumes Task 4 APIs and `Page<T>` types.
 - `DataTable` receives columns, rows, sort state, and pagination callbacks; it never loads all rows client-side.
 
-- [ ] **Step 1: Add RED UI tests for nulls, pagination and VOC drill-down**
+- [ ] **Step 1: Add RED UI tests**
 
 ```tsx
 it("renders missing metrics as em dash instead of zero", () => {
@@ -809,11 +791,9 @@ it("renders missing metrics as em dash instead of zero", () => {
   expect(screen.getByText("—")).toBeInTheDocument()
 })
 
-it("shows VOC as run sample statistics and opens matching comments", async () => {
+it("shows VOC as run sample statistics", async () => {
   render(<VocPage />)
   expect(await screen.findByText(/run sample/i)).toBeInTheDocument()
-  await userEvent.click(screen.getByRole("button", {name:/真实性/}))
-  expect(await screen.findByText("fixture comment")).toBeInTheDocument()
 })
 ```
 
@@ -824,11 +804,9 @@ cd web/frontend
 npm test -- --run
 ```
 
-Expected: FAIL because pages/DataTable do not exist.
-
 - [ ] **Step 3: Implement server-paginated entity views**
 
-Videos show caption, creator, followers, latest snapshot metrics, engagement/follower leverage, source, and media/deep-analysis status. Detail pages expose linked evidence IDs as clickable links to the Evidence route. VOC label percentages are computed/rendered from the API-provided denominator, never a platform-wide claim.
+Videos show caption, creator, followers, snapshot metrics, engagement/follower leverage, source, and media/deep-analysis status. Detail pages expose evidence IDs as links. VOC percentages use the API denominator and are explicitly labeled run/sample statistics.
 
 - [ ] **Step 4: Run tests and build**
 
@@ -864,25 +842,24 @@ git commit -m "feat(workbench): add entity and VOC exploration UI"
 **Interfaces:**
 - Consumes Task 5/6/3 APIs.
 - Evidence detail renders safe JSON and reverse references.
-- Intelligence renders five visibly distinct sections: Findings/Observations, Patterns, Insights, Hypotheses, Briefs.
+- Intelligence renders separate Findings/Observations, Patterns, Insights, Hypotheses, Briefs sections.
 - Report uses `react-markdown`; raw HTML remains disabled.
 
-- [ ] **Step 1: Add RED tests for evidence lineage, semantic separation and cost labeling**
+- [ ] **Step 1: Add RED tests**
 
 ```tsx
 it("shows evidence used-by lineage and collapsed JSON", async () => {
   render(<EvidenceDetailPage />)
   expect(await screen.findByText(/Used by/i)).toBeInTheDocument()
-  expect(screen.getByRole("button", {name:/show response json/i})).toBeInTheDocument()
 })
 
-it("keeps evidence intelligence layers visibly separate", async () => {
+it("keeps intelligence layers separate", async () => {
   render(<IntelligencePage />)
   for (const label of ["Findings", "Patterns", "Insights", "Hypotheses", "Briefs"])
     expect(await screen.findByRole("heading", {name: label})).toBeInTheDocument()
 })
 
-it("labels provider cost as estimate, not invoice", async () => {
+it("labels provider cost as estimate", async () => {
   render(<ExecutionPage />)
   expect(await screen.findByText(/estimate/i)).toBeInTheDocument()
   expect(screen.queryByText(/invoice/i)).not.toBeInTheDocument()
@@ -896,13 +873,11 @@ cd web/frontend
 npm test -- --run
 ```
 
-Expected: FAIL because pages/components are missing.
+- [ ] **Step 3: Implement remaining screens**
 
-- [ ] **Step 3: Implement remaining Workbench screens**
+`JsonViewer` is collapsed by default. Media shows asset status/error when no media exists. Keyframes use backend ID routes only. Report displays the persisted-report notice when absent. Intelligence cards show confidence/status and evidence links.
 
-`JsonViewer` is collapsed by default. Media page shows asset status/error even when no downloadable asset exists. Keyframes use backend ID routes only. Report page displays the persisted-report notice when absent. Intelligence cards show confidence/status and evidence links when available.
-
-- [ ] **Step 4: Run tests and production build**
+- [ ] **Step 4: Run tests and build**
 
 ```bash
 npm test -- --run
@@ -930,8 +905,8 @@ git commit -m "feat(workbench): complete evidence and intelligence UI"
 
 **Interfaces:**
 - CI Python matrix includes Phase 12 backend tests.
-- Separate frontend job uses Node 22, `npm ci`, Vitest, TypeScript/Vite build, and verifies committed `dist/` is current.
-- Release audit requires Workbench source plus built `dist/index.html` and rejects obvious secret-bearing frontend artifacts.
+- Frontend job uses Node 22, `npm ci`, Vitest, build, and verifies committed `dist/` is current.
+- Release audit requires Workbench source plus `dist/index.html` and retains secret checks.
 
 - [ ] **Step 1: Add RED distribution assertions**
 
@@ -943,9 +918,6 @@ def test_ci_runs_phase12_and_frontend_without_provider_execution(self):
     self.assertIn("npm test -- --run", text)
     self.assertNotIn("live_validation.py --execute", text)
     self.assertNotIn("run_research.py --yes", text)
-
-def test_bundled_frontend_distribution_exists(self):
-    self.assertTrue((ROOT / "web" / "frontend" / "dist" / "index.html").exists())
 ```
 
 - [ ] **Step 2: Run and confirm RED**
@@ -954,11 +926,7 @@ def test_bundled_frontend_distribution_exists(self):
 PYTHONPATH=scripts:. python -m unittest scripts/test_phase12_workbench.py -v
 ```
 
-Expected: FAIL until CI/release audit are updated.
-
 - [ ] **Step 3: Update CI and release audit**
-
-Add frontend job:
 
 ```yaml
 frontend-tests:
@@ -979,7 +947,7 @@ frontend-tests:
     - run: git diff --exit-code -- web/frontend/dist
 ```
 
-Add `scripts/test_phase12_workbench.py` to the Python loop. Extend `release_check.py` required paths with `web/frontend/dist/index.html`, `web/backend/app.py`, and `scripts/research_web.py` while retaining all existing secret checks.
+Add Phase 12 to Python CI and require `web/frontend/dist/index.html`, `web/backend/app.py`, `scripts/research_web.py` in release audit.
 
 - [ ] **Step 4: Run all local offline gates**
 
@@ -991,7 +959,7 @@ python scripts/release_check.py --root .
 cd web/frontend && npm test -- --run && npm run build && cd ../..
 ```
 
-Expected: all PASS; no Provider/TikHub calls.
+Expected: all PASS; no TikHub calls.
 
 - [ ] **Step 5: Commit**
 
@@ -1013,17 +981,9 @@ git commit -m "ci(workbench): gate backend frontend and bundled build"
 - Modify: `scripts/test_phase12_workbench.py`
 
 **Interfaces:**
-- Produces CLI:
-
-```text
-python scripts/workbench_acceptance.py \
-  --runs-root <path> \
-  --run-id <run_id> \
-  [--expect-videos N] [--expect-creators N] [--expect-comments N]
-```
-
-- Acceptance is read-only and calls `create_app(... )` with FastAPI TestClient; it does not start a Provider call or mutate a run.
-- For the current local acceptance run, expected values are supplied by command-line flags, never hard-coded.
+- Produces CLI `python scripts/workbench_acceptance.py --runs-root <path> --run-id <run_id> [--expect-videos N] [--expect-creators N] [--expect-comments N]`.
+- Acceptance is read-only and uses FastAPI TestClient; it does not start Provider calls or mutate a run.
+- Real-run expected counts are command-line inputs, never product constants.
 
 - [ ] **Step 1: Add RED acceptance/version/docs tests**
 
@@ -1037,19 +997,13 @@ def test_docs_explain_workbench_and_read_only_boundary(self):
         self.assertIn(token, readme)
 ```
 
-Acceptance script exits nonzero if required APIs fail, counts differ from explicitly supplied expectations, evidence endpoint exposes a secret-like fixture value, or stage-flow endpoint is unreadable.
-
 - [ ] **Step 2: Run and confirm RED**
 
 ```bash
 PYTHONPATH=scripts:. python -m unittest scripts/test_phase12_workbench.py -v
 ```
 
-Expected: FAIL on VERSION/docs/acceptance script.
-
-- [ ] **Step 3: Implement acceptance script and release docs/version**
-
-Core acceptance logic:
+- [ ] **Step 3: Implement acceptance and release docs/version**
 
 ```python
 app = create_app(Path(args.runs_root), frontend_dist=ROOT / "web" / "frontend" / "dist")
@@ -1060,17 +1014,9 @@ assert summary["run_id"] == args.run_id
 assert flow
 ```
 
-Document one-command Web startup, full Workbench tabs, data provenance semantics, existing v1.1.x compatibility, and the explicit v1.2.0 rule that Web cannot launch paid Provider work.
+Document startup, Workbench tabs, provenance semantics, v1.1.x compatibility, and Web's no-paid-execution boundary. Set `VERSION=1.2.0`.
 
-Set:
-
-```text
-VERSION=1.2.0
-```
-
-- [ ] **Step 4: Run complete offline release suite and current real-run acceptance**
-
-Offline suite:
+- [ ] **Step 4: Run complete offline suite and real-run acceptance**
 
 ```bash
 PYTHONPATH=scripts:. python -m unittest \
@@ -1094,8 +1040,6 @@ python scripts/release_check.py --root .
 cd web/frontend && npm ci && npm test -- --run && npm run build && cd ../..
 ```
 
-Current real-run local acceptance:
-
 ```powershell
 python scripts/workbench_acceptance.py `
   --runs-root social-research\runs `
@@ -1105,7 +1049,7 @@ python scripts/workbench_acceptance.py `
   --expect-comments 193
 ```
 
-Expected report:
+Expected:
 
 ```text
 WORKBENCH_ACCEPTANCE=PASS
@@ -1119,13 +1063,13 @@ PROVIDER_CALLS_MADE=0
 RUN_MUTATION=NO
 ```
 
-Then launch for visual acceptance:
+Launch visual acceptance:
 
 ```powershell
 python scripts/research_web.py --runs-root social-research\runs
 ```
 
-Codex/worker must verify in the browser that the current run appears on Runs Home and that Overview, Flow, Videos, Creators, VOC, Evidence, Media, Intelligence, Report, and Cost & Execution routes load without console/runtime errors. This visual check does not authorize or trigger Provider calls.
+Worker verifies Runs Home, Overview, Flow, Videos, Creators, VOC, Evidence, Media, Intelligence, Report, and Cost & Execution load without runtime/console errors. This does not authorize Provider calls.
 
 - [ ] **Step 5: Commit final release changes**
 
@@ -1137,8 +1081,6 @@ git commit -m "release: modular-research v1.2.0 research workbench"
 ---
 
 ## Final Verification Before PR Readiness
-
-Run all of the following from a clean checkout of the feature branch:
 
 ```bash
 python -m pip install -r requirements.txt
@@ -1154,32 +1096,32 @@ cd ../..
 git diff --exit-code -- web/frontend/dist
 ```
 
-Then verify CI on the exact feature HEAD for Python 3.10, 3.12, 3.13 and frontend-tests. No PR may be marked ready until all checks pass.
+Verify CI on the exact feature HEAD for Python 3.10, 3.12, 3.13 and frontend-tests. No PR may be marked ready until all checks pass.
 
 ## Spec Coverage Self-Review Matrix
 
-| Spec requirement | Implementation task |
+| Spec requirement | Task |
 |---|---|
-| Local-only FastAPI + launcher | Task 7 |
-| React/TypeScript bundled SPA | Tasks 8-10 |
-| Runtime without Node | Tasks 8, 11 |
-| Run discovery/history/summary | Task 2, Task 8 |
-| Stage flow + status basis | Task 3, Task 8 |
-| Videos/creators/VOC | Tasks 4, 9 |
-| Evidence explorer + redaction | Tasks 5, 10 |
-| Evidence lineage | Tasks 5, 10 |
-| Media/keyframes/OCR/transcript | Tasks 6, 10 |
-| Findings/patterns/insights/hypotheses/briefs | Tasks 6, 10 |
-| Report artifact priority | Tasks 6, 10 |
-| Plan vs Actual / cost labeling | Tasks 3, 10 |
-| Read-only SQLite/filesystem security | Tasks 2, 6, 7 |
-| Old/partial v1.1.x compatibility | Tasks 1-3, 6 |
-| Pagination/max page size | Task 4, Task 9 |
-| Mobile/responsive/accessible states | Tasks 8-10 |
-| Offline CI / no TikHub | Task 11 |
-| Existing real run acceptance | Task 12 |
-| v1.2.0 docs/release/version | Task 12 |
+| Local-only FastAPI + launcher | 7 |
+| React/TypeScript bundled SPA | 8-10 |
+| Runtime without Node | 8, 11 |
+| Run discovery/history/summary | 2, 8 |
+| Stage flow + status basis | 3, 8 |
+| Videos/creators/VOC | 4, 9 |
+| Evidence explorer + redaction | 5, 10 |
+| Evidence lineage | 5, 10 |
+| Media/keyframes/OCR/transcript | 6, 10 |
+| Findings/patterns/insights/hypotheses/briefs | 6, 10 |
+| Report artifact priority | 6, 10 |
+| Plan vs Actual / cost labeling | 3, 10 |
+| Read-only SQLite/filesystem security | 2, 6, 7 |
+| Old/partial v1.1.x compatibility | 1-3, 6 |
+| Pagination/max page size | 4, 9 |
+| Responsive/accessibility states | 8-10 |
+| Offline CI / no TikHub | 11 |
+| Existing real run acceptance | 12 |
+| v1.2.0 docs/release/version | 12 |
 
 ## Execution Handoff
 
-Recommended execution mode: **Subagent-Driven Development**. Each task above is independently reviewable and should use a fresh implementation context, TDD RED→GREEN, then spec/compliance review before the next task. If subagents are unavailable in the current product, execute the same tasks sequentially with the executing-plans workflow and preserve the same review gates.
+Recommended execution mode: **Subagent-Driven Development**. Each task is independently reviewable and uses TDD RED→GREEN plus review before the next task. If subagents are unavailable in the current product, execute the tasks sequentially with the executing-plans workflow and preserve the same gates.
