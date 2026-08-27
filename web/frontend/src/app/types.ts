@@ -119,3 +119,14 @@ export type CreatorVideo = {
 export type CreatorDetail = CreatorSummary & {
   videos: CreatorVideo[];
 };
+
+export type VocLabel = {
+  label: string;
+  count: number;
+  share: number | null;
+};
+
+export type VocSummary = {
+  denominator: number;
+  labels: VocLabel[];
+};

@@ -6,6 +6,7 @@ import { EvidenceDetailPage } from "../pages/EvidenceDetailPage";
 import { RunsPage } from "../pages/RunsPage";
 import { VideoDetailPage } from "../pages/VideoDetailPage";
 import { VideosPage } from "../pages/VideosPage";
+import { VocPage } from "../pages/VocPage";
 
 export function App() {
   return (
@@ -15,6 +16,7 @@ export function App() {
       <Route path="/runs/:runId/videos" element={<VideosPage />} />
       <Route path="/runs/:runId/creators/:creatorId" element={<CreatorDetailPage />} />
       <Route path="/runs/:runId/creators" element={<CreatorsPage />} />
+      <Route path="/runs/:runId/voc" element={<VocPage />} />
       <Route path="*" element={<RunsPage />} />
     </Routes>
   );
