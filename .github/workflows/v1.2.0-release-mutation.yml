@@ -22,46 +22,30 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Finalize version, docs, and compact registry formatting
+      - name: Finalize release metadata
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
+          import base64
           import json
           from pathlib import Path
-
           root = Path('.')
           version_path = root / 'VERSION'
           readme_path = root / 'README.md'
           release_path = root / 'docs' / 'RELEASE.md'
           registry_path = root / 'references' / 'endpoints.json'
           manifest_path = root / 'references' / 'verifications' / 'tiktok-provider-verification-v1.2.0.json'
-
-          expected = {
-              'ad_percentile',
-              'ads_detail',
-              'ads_search',
-              'creator_posts',
-              'creator_search_insights',
-              'creator_search_insights_trend',
-              'top_ads_spotlight',
-              'top_contents_list',
-              'video_comments',
-              'video_detail',
-              'video_metrics',
-              'video_search',
-          }
+          expected = {'ad_percentile','ads_detail','ads_search','creator_posts','creator_search_insights','creator_search_insights_trend','top_ads_spotlight','top_contents_list','video_comments','video_detail','video_metrics','video_search'}
           manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
           assert manifest['validation_calls'] == {'attempted': 12, 'succeeded': 12, 'failed': 0}
           assert manifest['pricing_basis'] == 'provider_default'
           assert set(manifest['promoted_capabilities']) == expected
           assert manifest['non_promoted_capabilities'] == []
-
           registry = json.loads(registry_path.read_text(encoding='utf-8'))
           semantic_before = json.dumps(registry, ensure_ascii=False, sort_keys=True)
           tiktok = [e for e in registry['endpoints'] if e.get('provider') == 'tikhub' and e.get('platform') == 'tiktok']
-          promoted = {e['capability'] for e in tiktok if e.get('status') == 'live_verified'}
-          assert promoted == expected
+          assert {e['capability'] for e in tiktok if e.get('status') == 'live_verified'} == expected
           for entry in tiktok:
               if entry['capability'] in expected:
                   assert entry['unit_price_usd'] is None
@@ -71,8 +55,7 @@ jobs:
                   assert entry['normalizer_validation'] == 'PASS'
               else:
                   assert entry['status'] == 'documented'
-
-          lines = ['{', f'  "schema_version": {json.dumps(registry["schema_version"], ensure_ascii=False)},', '  "endpoints": [']
+          lines = ['{', '  "schema_version": ' + json.dumps(registry['schema_version'], ensure_ascii=False) + ',', '  "endpoints": [']
           for index, entry in enumerate(registry['endpoints']):
               suffix = ',' if index + 1 < len(registry['endpoints']) else ''
               lines.append('    ' + json.dumps(entry, ensure_ascii=False, separators=(',', ':')) + suffix)
@@ -80,225 +63,37 @@ jobs:
           lines.append('  "providers": {')
           providers = list(registry['providers'].items())
           for p_index, (provider_name, provider) in enumerate(providers):
-              lines.append(f'    {json.dumps(provider_name)}: {{')
+              lines.append('    ' + json.dumps(provider_name) + ': {')
               items = list(provider.items())
               for i, (key, value) in enumerate(items):
                   comma = ',' if i + 1 < len(items) else ''
-                  if isinstance(value, dict):
-                      rendered = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
-                  else:
-                      rendered = json.dumps(value, ensure_ascii=False)
-                  lines.append(f'      {json.dumps(key)}: {rendered}{comma}')
+                  rendered = json.dumps(value, ensure_ascii=False, separators=(',', ':')) if isinstance(value, dict) else json.dumps(value, ensure_ascii=False)
+                  lines.append('      ' + json.dumps(key) + ': ' + rendered + comma)
               lines.append('    }' + (',' if p_index + 1 < len(providers) else ''))
           lines.extend(['  }', '}'])
           registry_path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
-          semantic_after = json.dumps(json.loads(registry_path.read_text(encoding='utf-8')), ensure_ascii=False, sort_keys=True)
-          assert semantic_after == semantic_before
-
+          assert json.dumps(json.loads(registry_path.read_text(encoding='utf-8')), ensure_ascii=False, sort_keys=True) == semantic_before
+          release_status = base64.b64decode('IyMg5Y+R5biD54q25oCBCgrlvZPliY3niYjmnKzvvJpgMS4yLjBg44CCCgpgMS4yLjBgIOaYryBUaWtUb2sgUHJvdmlkZXIgVmVyaWZpY2F0aW9uIHJlbGVhc2XjgIIyMDI2LTA4LTI3IOWcqCBgMTJgIOasoSBoYXJkIGNhbGwgY2VpbGluZ+OAgeWGhemDqCBoYXJkIGJ1ZGdldCBgJDAuMDEyYCDkuIvlrozmiJDkuobkuIDmrKHlj5fmjqfnnJ/lrp4gVGlrSHViIOmqjOivge+8mmAxMiBhdHRlbXB0ZWQgLyAxMiBzdWNjZWVkZWQgLyAwIGZhaWxlZGDjgILlj6rmnInlrp7pmYXlj5blvpcgUHJvdmlkZXIgY29kZSAyMDAg5LiUIG5vcm1hbGl6ZXIg5a6M5oiQ55qEIGNhcGFiaWxpdHkg5omN5Y2H57qn5Li6IGBsaXZlX3ZlcmlmaWVkYO+8mgoKYGBgdGV4dAphZF9wZXJjZW50aWxlCmFkc19kZXRhaWwKYWRzX3NlYXJjaApjcmVhdG9yX3Bvc3RzCmNyZWF0b3Jfc2VhcmNoX2luc2lnaHRzCmNyZWF0b3Jfc2VhcmNoX2luc2lnaHRzX3RyZW5kCnRvcF9hZHNfc3BvdGxpZ2h0CnRvcF9jb250ZW50c19saXN0CnZpZGVvX2NvbW1lbnRzCnZpZGVvX2RldGFpbAp2aWRlb19tZXRyaWNzCnZpZGVvX3NlYXJjaApgYGAKCuacquWcqOivpeasoeecn+WuniBydW4g5Lit6LCD55So55qEIFRpa1RvayBjYXBhYmlsaXR577yI5L6L5aaCIGBjcmVhdG9yX3NlYXJjaF9pbnNpZ2h0c19kZXRhaWxg44CBYGNyZWF0b3Jfc2VhcmNoX2luc2lnaHRzX3ZpZGVvc2DjgIFgYWRfa2V5ZnJhbWVfYW5hbHlzaXNg44CBYGFkX2ludGVyYWN0aXZlX2FuYWx5c2lzYOOAgWB0b3BfY29udGVudHNfaXRlbV9kZXRhaWxg77yJ57un57ut5L+d5oyBIGBkb2N1bWVudGVkYOOAgui/mSAxMiDkuKrmlrDpqozor4EgY2FwYWJpbGl0eSDnmoQgYHVuaXRfcHJpY2VfdXNkYCDku43kuLogYG51bGxg77ybYCQwLjAxMmAg5LuF5piv5oyJIHByb3ZpZGVyLWRlZmF1bHQgYCQwLjAwMS9yZXF1ZXN0YCDlvpflh7rnmoTpooTnrpfkuIrnlYzkvLDnrpfvvIzkuI3mmK8gZW5kcG9pbnQg57K+56Gu5Lu35qC85oiWIFByb3ZpZGVyIOacgOe7iOi0puWNleOAggoKdjEuMS4zIOeahOWFreS4qiBEb3V5aW4gYGxpdmVfdmVyaWZpZWRgIGNhcGFiaWxpdHkg5Y+K5YW2IDIwMjYtMDgtMjYg6aqM6K+BIG1ldGFkYXRhIOS/neaMgeS4jeWPmO+8m3YxLjEuMSDnmoQgYm91bmRlZCBTdGFuZGFyZCBzYW1wbGluZyAvIFBsYW5uZXIgZmFuLW91dCDkuZ/mnKrmianlpKfjgIIK').decode('utf-8')
+          tiktok_section = base64.b64decode('IyMjIFRpa1RvawoKYGBgYmFzaApweXRob24gc2NyaXB0cy9saXZlX3ZhbGlkYXRpb24ucHkgXAogIC0tcGxhdGZvcm0gdGlrdG9rIFwKICAtLXRvcGljICJzdGFuZGluZyBkZXNrIiBcCiAgLS1tYXJrZXQgVVMgXAogIC0tbWF4LWNhbGxzIDEyCmBgYAoK55yf5a6e6aqM6K+B5ZCM5qC35b+F6aG75pi+5byP5Yqg5YWl77yaCgpgYGB0ZXh0Ci0tZXhlY3V0ZQotLXllcwotLW1heC1idWRnZXQtdXNkIDxoYXJkIGNlaWxpbmc+CmBgYAoKRE5TL3RyYW5zcG9ydCBmYWlsdXJlIOW/hemhu+aKpeWRiuS4uiBlbnZpcm9ubWVudC90cmFuc3BvcnQgZmFpbHVyZe+8m+WPquacieWunumZheWPluW+lyBQcm92aWRlciByZXNwb25zZSDkuJQgbm9ybWFsaXplciDlrozmiJDnmoQgZW5kcG9pbnQg5omN6IO95Y2H57qn5Li6IGBsaXZlX3ZlcmlmaWVkYOOAggoKMjAyNi0wOC0yNyDnmoTlj5fmjqcgVGlrVG9rIOmqjOaUtuS9v+eUqCBgc3RhbmRpbmcgZGVzayAvIFVTYO+8jOWcqCBgY2FsbF9jZWlsaW5nPTEyYCDkuIvlj5blvpcgYDEyLzEyYCDmiJDlip8gUHJvdmlkZXIgcmVzcG9uc2XvvIzlubblrozmiJAgbm9ybWFsaXplcuOAguWunumZhemqjOivgeeahCBjYXBhYmlsaXR5IOaYr++8mgoKYGBgdGV4dApjcmVhdG9yX3NlYXJjaF9pbnNpZ2h0cwp2aWRlb19zZWFyY2gKdG9wX2NvbnRlbnRzX2xpc3QKYWRzX3NlYXJjaAp0b3BfYWRzX3Nwb3RsaWdodApjcmVhdG9yX3NlYXJjaF9pbnNpZ2h0c190cmVuZAp2aWRlb19kZXRhaWwKdmlkZW9fbWV0cmljcwp2aWRlb19jb21tZW50cwpjcmVhdG9yX3Bvc3RzCmFkc19kZXRhaWwKYWRfcGVyY2VudGlsZQpgYGAKCuivpeS6i+WunuWPquaUr+aMgeS4iui/sOWunumZheiwg+eUqOWIsOeahCAxMiDkuKogY2FwYWJpbGl0ee+8m+acquiwg+eUqCBlbmRwb2ludCDkuI3lvpfmja7mraTljYfnuqfjgIJgZXN0aW1hdGVkX21heF9jb3N0X3VzZD0wLjAxMmAg55qEIGBwcmljaW5nX2Jhc2lzPXByb3ZpZGVyX2RlZmF1bHRg77yM5Zug5q2k5LiN6IO95o6o5a+8IGVuZHBvaW50IGV4YWN0IHByaWNl77yM5Lmf5LiN6IO96KeG5Li65pyA57uI6LSm5Y2V44CCCg==').decode('utf-8')
+          release_doc = base64.b64decode('IyBNb2R1bGFyIFJlc2VhcmNoIHYxLjIuMCDlj5HluIPor7TmmI4KCiMjIOeKtuaAgQoKYHYxLjIuMGAg5pivIFRpa1RvayBQcm92aWRlciBWZXJpZmljYXRpb24gcmVsZWFzZeOAguWug+S4jeaJqeWkp+eOsOaciSBib3VuZGVkIFJlc2VhcmNoIFBsYW5uZXLjgIFTdGFuZGFyZCBzYW1wbGluZyDmiJbnoJTnqbYgZmFuLW91dO+8m+acrOasoeWPquaKiuW3suacieecn+WuniBQcm92aWRlciArIG5vcm1hbGl6ZXIg6K+B5o2u5YaZ5ZueIEVuZHBvaW50IFJlZ2lzdHJ577yM5bm25Yqg5YWl5Y+v5Zue5b2S55qEIFRpa1RvayB2ZXJpZmljYXRpb24vcmVsZWFzZSBnYXRl44CCCgojIyDnnJ/lrp7pqozor4Hor4Hmja4KCjIwMjYtMDgtMjcg5L2/55So5Y+X5o6nIFRpa0h1YiBsaXZlLXZhbGlkYXRpb24gaGFybmVzcyDlr7kgYHN0YW5kaW5nIGRlc2sgLyBVU2Ag5a6M5oiQ5LiA5qyh55yf5a6eIFRpa1RvayDpqozor4HvvJoKCmBgYHRleHQKQ0FMTF9DRUlMSU5HPTEyCkNBTExTX0FUVEVNUFRFRD0xMgpDQUxMU19TVUNDRUVERUQ9MTIKQ0FMTFNfRkFJTEVEPTAKRVNUSU1BVEVEX01BWF9DT1NUX1VTRD0wLjAxMgpQUklDSU5HX0JBU0lTPXByb3ZpZGVyX2RlZmF1bHQKYGBgCgrku6XkuIsgMTIg5LiqIGNhcGFiaWxpdHkg5a6e6ZmF5Y+W5b6XIFByb3ZpZGVyIGNvZGUgMjAw77yM5LiU5a+55bqUIG5vcm1hbGl6ZXIg6LCD55So5a6M5oiQ77yaCgpgYGB0ZXh0CmFkX3BlcmNlbnRpbGUKYWRzX2RldGFpbAphZHNfc2VhcmNoCmNyZWF0b3JfcG9zdHMKY3JlYXRvcl9zZWFyY2hfaW5zaWdodHMKY3JlYXRvcl9zZWFyY2hfaW5zaWdodHNfdHJlbmQKdG9wX2Fkc19zcG90bGlnaHQKdG9wX2NvbnRlbnRzX2xpc3QKdmlkZW9fY29tbWVudHMKdmlkZW9fZGV0YWlsCnZpZGVvX21ldHJpY3MKdmlkZW9fc2VhcmNoCmBgYAoK5Zug5q2k6L+Z5LqbIGNhcGFiaWxpdHkg55qEIFJlZ2lzdHJ5IHZlcmlmaWNhdGlvbiBtZXRhZGF0YSDljYfnuqfkuLrvvJoKCmBgYHRleHQKc3RhdHVzPWxpdmVfdmVyaWZpZWQKdmVyaWZpZWRfYXQ9MjAyNi0wOC0yNwp2ZXJpZmljYXRpb25fYmFzaXM9cmVhbF9wcm92aWRlcl9yZXNwb25zZQp2YWxpZGF0aW9uX2NhbGxzPXthdHRlbXB0ZWQ6MTIsc3VjY2VlZGVkOjEyLGZhaWxlZDowfQpub3JtYWxpemVyX3ZhbGlkYXRpb249UEFTUwpgYGAKCmBQQVNTYCDooajnpLogUHJvdmlkZXIgY29udHJhY3Qg5LiOIG5vcm1hbGl6ZXIg5omn6KGM6ZO+5a6M5oiQ77yb5a6D5LiN562J5Lu35LqO5q+P5LiA56eN5b2S5LiA5YyWIEV2aWRlbmNlIOexu+Wei+mDveW/hemhu+mdnuepuuOAguacquWcqOecn+WuniBydW4g5Lit6LCD55So55qEIFRpa1RvayBjYXBhYmlsaXR5IOS4jeaNruatpOWNh+e6p++8jOS+i+WmgiBgY3JlYXRvcl9zZWFyY2hfaW5zaWdodHNfZGV0YWlsYOOAgWBjcmVhdG9yX3NlYXJjaF9pbnNpZ2h0c192aWRlb3Ng44CBYGFkX2tleWZyYW1lX2FuYWx5c2lzYOOAgWBhZF9pbnRlcmFjdGl2ZV9hbmFseXNpc2DjgIFgdG9wX2NvbnRlbnRzX2l0ZW1fZGV0YWlsYCDku43kv53mjIEgYGRvY3VtZW50ZWRg44CCCgojIyBQcmljaW5nIGJvdW5kYXJ5CgpgJDAuMDEyYCDmmK/mjIkgcHJvdmlkZXItZGVmYXVsdCBgJDAuMDAxL3JlcXVlc3RgIOiuoeeul+eahCBoYXJkLWJ1ZGdldCDop4TliJLkuIrnlYzvvIzkuI3mmK8gUHJvdmlkZXIg5pyA57uI6LSm5Y2V77yM5Lmf5LiN5piv5Lu75L2V5Y2V5LiAIFRpa1RvayBlbmRwb2ludCDnmoTnsr7noa7miqXku7fjgIIKCuWboOatpOacrOasoSAxMiDkuKrmlrAgYGxpdmVfdmVyaWZpZWRgIFRpa1RvayBjYXBhYmlsaXR5IOWFqOmDqOe7p+e7reS/neaMge+8mgoKYGBgdGV4dAp1bml0X3ByaWNlX3VzZD1udWxsCnByaWNlX3NvdXJjZT1wcm92aWRlcl9kZWZhdWx0CmlzX2VuZHBvaW50X2V4YWN0PWZhbHNlCmBgYAoK6ZyA6KaBIGVuZHBvaW50L2RheS1zcGVjaWZpYyDnsr7noa7miqXku7fml7bvvIzlupTljZXni6zkvb/nlKggUHJvdmlkZXIg55qE5Lu35qC85p+l6K+i6IO95Yqb77yM6ICM5LiN5piv5LuO5pys5qyh6aqM6K+B6aKE566X5Y+N5o6o44CCCgojIyBFdmlkZW5jZSBib3VuZGFyeQoK5YWs5byA5LuT5bqT5Y+q5L+d55WZ6ISx5pWPIHZlcmlmaWNhdGlvbiBtYW5pZmVzdO+8mgoKYHJlZmVyZW5jZXMvdmVyaWZpY2F0aW9ucy90aWt0b2stcHJvdmlkZXItdmVyaWZpY2F0aW9uLXYxLjIuMC5qc29uYAoK5YW25Lit5Y+q5YyF5ZCr5bmz5Y+w44CB5pel5pyf44CBY2FsbCBzdW1tYXJ544CBcHJpY2luZyBiYXNpc+OAgXByb21vdGVkL25vbi1wcm9tb3RlZCBjYXBhYmlsaXR577yM5LiN5YyF5ZCrIEFQSSBLZXnjgIFyZXF1ZXN0IHBheWxvYWTjgIFyYXcgUHJvdmlkZXIgcmVzcG9uc2Ug5oiWIHJlc3BvbnNlIHNoYXBl44CC55yf5a6eIGBsaXZlLXZhbGlkYXRpb24uanNvbmAg5LuF55So5LqO5Y+X5o6n6aqM6K+B5LiOIHByb21vdGlvbiDov4fnqIvvvIzkuI3ov5vlhaUgcmVsZWFzZSB0cmVl44CCCgojIyBEb3V5aW4gY29tcGF0aWJpbGl0eQoKdjEuMS4zIOW3sumqjOivgeeahOWFreS4qiBEb3V5aW4gY2FwYWJpbGl0eSDkv53mjIHkuI3lj5jvvJoKCmBgYHRleHQKdmlkZW9fZGV0YWlsX3YzCnZpZGVvX3NlYXJjaAp2aWRlb19jb21tZW50c192Mwp1c2VyX3Byb2ZpbGVfdjMKY3JlYXRvcl9wb3N0c192Mwp2aWRlb19zdGF0aXN0aWNzX3YzCmBgYAoK5a6D5Lus5LuN5L+d5oyBIGB2ZXJpZmllZF9hdD0yMDI2LTA4LTI2YOOAgWB2YWxpZGF0aW9uX2NhbGxzPXthdHRlbXB0ZWQ6NixzdWNjZWVkZWQ6NixmYWlsZWQ6MH1gIOWSjCBgbm9ybWFsaXplcl92YWxpZGF0aW9uPVBBU1Ng44CCRG91eWluIHNoYXJlLXVybCBmYWxsYmFjayDku43lj6rmmK8gYGRvY3VtZW50ZWRgIGNvbnRyYWN044CCCgojIyBUREQgLyBleGVjdXRpb24gZXZpZGVuY2UKCi0gVGlrVG9rIHJlYWwtcHJvdmlkZXIgcnVu77yaR2l0SHViIEFjdGlvbnMgcnVuIGAzMzA0MjIwOTI0N2DvvIzmibnlh4bovrnnlYzkuLrmnIDlpJogMTIgY2FsbHMgLyBgJDAuMDEyYO+8m+acgOe7iCBgMTIvMTJgIOaIkOWKn+OAggotIFBoYXNlIDEzIFJFRO+8mnJ1biBgMzMwNDcxMTc2NTFgIOeyvuehruWksei0peS6jiBgVkVSU0lPTj0xLjEuM2DvvIzogIwgdjEuMi4wIHJlbGVhc2UgZ3VhcmQg6KaB5rGCIGAxLjIuMGDjgIIKLSBTYW5pdGl6ZWQgZXZpZGVuY2UgYXBwbHnvvJpydW4gYDMzMDQ3MzY5OTMxYO+8jGFydGlmYWN0IOS4i+i9veOAgWV2aWRlbmNlLWdhdGVkIHByb21vdGlvbuOAgWZpbGUtZXhhY3Qgc2NvcGUgZ3VhcmQg5LiOIGNvbW1pdCDlhajpg6ggUEFTU+OAggotIOacgOe7iCBQUiDliY0gQ0kg57un57ut5L2/55SoIFB5dGhvbiBgMy4xMCAvIDMuMTIgLyAzLjEzYCDnmoQgb2ZmbGluZSBtYXRyaXjvvJvkuI3ms6jlhaUgVGlrSHViIEtlee+8jOS5n+S4jeaJp+ihjOS7mOi0ueivt+axguOAggoKIyMgU2VjdXJpdHkgLyByZXBvc2l0b3J5IGJvdW5kYXJ5CgrmnKwgcmVsZWFzZSAqKuS4jeaPkOS6pCoq77yaCgotIFRpa0h1YiBBUEkgS2V577ybCi0g5pys5ZywIGBjb25maWcuanNvbmDvvJsKLSByYXcgUHJvdmlkZXIgcmVzcG9uc2XvvJsKLSBgbGl2ZS12YWxpZGF0aW9uLmpzb25g77ybCi0gbGl2ZS12YWxpZGF0aW9uIOacrOWcsOi+k+WHuuebruW9le+8mwotIOS4gOasoeaAp+S7mOi0uSBQcm92aWRlciB3b3JrZmxvdyAvIHRyaWdnZXIgbWFya2Vy77ybCi0g5LiA5qyh5oCnIGV2aWRlbmNlLWFwcGx5IHdvcmtmbG93IC8gdHJpZ2dlciBtYXJrZXLjgIIKCuW4uOinhCBDSSDkv53mjIEgb2ZmbGluZe+8jOS4jeazqOWFpSBUaWtIdWIgS2V577yM5LiN5Lqn55Sf5LuY6LS56K+35rGC44CCCgojIyBMaWNlbnNlCgrlvZPliY3ku5PlupPku43mnKrlo7DmmI7orrjlj6/or4HvvJt2MS4yLjAg5LiN5re75YqgIE1JVOOAgUFwYWNoZS0yLjAg5oiW5YW25LuW6K645Y+v6K+B44CCCg==').decode('utf-8')
           readme = readme_path.read_text(encoding='utf-8')
-          start = '## 发布状态\n'
-          end = '\n## 安装\n'
-          assert readme.count(start) == 1 and readme.count(end) == 1
-          prefix, rest = readme.split(start, 1)
-          _, tail = rest.split(end, 1)
-          release_status = '''## 发布状态
-
-当前版本：`1.2.0`。
-
-`1.2.0` 是 TikTok Provider Verification release。2026-08-27 在 `12` 次 hard call ceiling、内部 hard budget `$0.012` 下完成了一次受控真实 TikHub 验证：`12 attempted / 12 succeeded / 0 failed`。只有实际取得 Provider code 200 且 normalizer 完成的 capability 才升级为 `live_verified`：
-
-```text
-ad_percentile
-ads_detail
-ads_search
-creator_posts
-creator_search_insights
-creator_search_insights_trend
-top_ads_spotlight
-top_contents_list
-video_comments
-video_detail
-video_metrics
-video_search
-```
-
-未在该次真实 run 中调用的 TikTok capability（例如 `creator_search_insights_detail`、`creator_search_insights_videos`、`ad_keyframe_analysis`、`ad_interactive_analysis`、`top_contents_item_detail`）继续保持 `documented`。这 12 个新验证 capability 的 `unit_price_usd` 仍为 `null`；`$0.012` 仅是按 provider-default `$0.001/request` 得出的预算上界估算，不是 endpoint 精确价格或 Provider 最终账单。
-
-v1.1.3 的六个 Douyin `live_verified` capability 及其 2026-08-26 验证 metadata 保持不变；v1.1.1 的 bounded Standard sampling / Planner fan-out 也未扩大。
-'''
-          readme = prefix + release_status + end + tail
-
-          tiktok_start = '### TikTok\n'
-          tiktok_end = '\n## 输出\n'
-          assert readme.count(tiktok_start) == 1 and readme.count(tiktok_end) == 1
-          prefix, rest = readme.split(tiktok_start, 1)
-          _, tail = rest.split(tiktok_end, 1)
-          tiktok_section = '''### TikTok
-
-```bash
-python scripts/live_validation.py \\
-  --platform tiktok \\
-  --topic "standing desk" \\
-  --market US \\
-  --max-calls 12
-```
-
-真实验证同样必须显式加入：
-
-```text
---execute
---yes
---max-budget-usd <hard ceiling>
-```
-
-DNS/transport failure 必须报告为 environment/transport failure；只有实际取得 Provider response 且 normalizer 完成的 endpoint 才能升级为 `live_verified`。
-
-2026-08-27 的受控 TikTok 验收使用 `standing desk / US`，在 `call_ceiling=12` 下取得 `12/12` 成功 Provider response，并完成 normalizer。实际验证的 capability 是：
-
-```text
-creator_search_insights
-video_search
-top_contents_list
-ads_search
-top_ads_spotlight
-creator_search_insights_trend
-video_detail
-video_metrics
-video_comments
-creator_posts
-ads_detail
-ad_percentile
-```
-
-该事实只支持上述实际调用到的 12 个 capability；未调用 endpoint 不得据此升级。`estimated_max_cost_usd=0.012` 的 `pricing_basis=provider_default`，因此不能推导 endpoint exact price，也不能视为最终账单。
-'''
-          readme = prefix + tiktok_section + tiktok_end + tail
-          old_test = 'PYTHONPATH=scripts python -m unittest scripts/test_phase11_provider_verification.py\n'
-          assert old_test in readme
-          readme = readme.replace(
-              old_test,
-              'PYTHONPATH=scripts python -m unittest scripts/test_phase13_tiktok_release.py\n' + old_test,
-              1,
-          )
+          assert readme.count('## 发布状态\n') == 1
+          prefix, rest = readme.split('## 发布状态\n', 1)
+          _, tail = rest.split('\n## 安装\n', 1)
+          readme = prefix + release_status + '\n## 安装\n' + tail
+          assert readme.count('### TikTok\n') == 1
+          prefix, rest = readme.split('### TikTok\n', 1)
+          _, tail = rest.split('\n## 输出\n', 1)
+          readme = prefix + tiktok_section + '\n## 输出\n' + tail
+          phase11 = 'PYTHONPATH=scripts python -m unittest scripts/test_phase11_provider_verification.py\n'
+          assert phase11 in readme
+          readme = readme.replace(phase11, 'PYTHONPATH=scripts python -m unittest scripts/test_phase13_tiktok_release.py\n' + phase11, 1)
           readme_path.write_text(readme, encoding='utf-8')
-
-          release = '''# Modular Research v1.2.0 发布说明
-
-## 状态
-
-`v1.2.0` 是 TikTok Provider Verification release。它不扩大现有 bounded Research Planner、Standard sampling 或研究 fan-out；本次只把已有真实 Provider + normalizer 证据写回 Endpoint Registry，并加入可回归的 TikTok verification/release gate。
-
-## 真实验证证据
-
-2026-08-27 使用受控 TikHub live-validation harness 对 `standing desk / US` 完成一次真实 TikTok 验证：
-
-```text
-CALL_CEILING=12
-CALLS_ATTEMPTED=12
-CALLS_SUCCEEDED=12
-CALLS_FAILED=0
-ESTIMATED_MAX_COST_USD=0.012
-PRICING_BASIS=provider_default
-```
-
-以下 12 个 capability 实际取得 Provider code 200，且对应 normalizer 调用完成：
-
-```text
-ad_percentile
-ads_detail
-ads_search
-creator_posts
-creator_search_insights
-creator_search_insights_trend
-top_ads_spotlight
-top_contents_list
-video_comments
-video_detail
-video_metrics
-video_search
-```
-
-因此这些 capability 的 Registry verification metadata 升级为：
-
-```text
-status=live_verified
-verified_at=2026-08-27
-verification_basis=real_provider_response
-validation_calls={attempted:12,succeeded:12,failed:0}
-normalizer_validation=PASS
-```
-
-`PASS` 表示 Provider contract 与 normalizer 执行链完成；它不等价于每一种归一化 Evidence 类型都必须非空。未在真实 run 中调用的 TikTok capability 不据此升级，例如 `creator_search_insights_detail`、`creator_search_insights_videos`、`ad_keyframe_analysis`、`ad_interactive_analysis`、`top_contents_item_detail` 仍保持 `documented`。
-
-## Pricing boundary
-
-`$0.012` 是按 provider-default `$0.001/request` 计算的 hard-budget 规划上界，不是 Provider 最终账单，也不是任何单一 TikTok endpoint 的精确报价。
-
-因此本次 12 个新 `live_verified` TikTok capability 全部继续保持：
-
-```text
-unit_price_usd=null
-price_source=provider_default
-is_endpoint_exact=false
-```
-
-需要 endpoint/day-specific 精确报价时，应单独使用 Provider 的价格查询能力，而不是从本次验证预算反推。
-
-## Evidence boundary
-
-公开仓库只保留脱敏 verification manifest：
-
-`references/verifications/tiktok-provider-verification-v1.2.0.json`
-
-其中只包含平台、日期、call summary、pricing basis、promoted/non-promoted capability，不包含 API Key、request payload、raw Provider response 或 response shape。真实 `live-validation.json` 仅用于受控验证与 promotion 过程，不进入 release tree。
-
-## Douyin compatibility
-
-v1.1.3 已验证的六个 Douyin capability 保持不变：
-
-```text
-video_detail_v3
-video_search
-video_comments_v3
-user_profile_v3
-creator_posts_v3
-video_statistics_v3
-```
-
-它们仍保持 `verified_at=2026-08-26`、`validation_calls={attempted:6,succeeded:6,failed:0}` 和 `normalizer_validation=PASS`。Douyin share-url fallback 仍只是 `documented` contract。
-
-## TDD / execution evidence
-
-- TikTok real-provider run：GitHub Actions run `33042209247`，批准边界为最多 12 calls / `$0.012`；最终 `12/12` 成功。
-- Phase 13 RED：run `33047117651` 精确失败于 `VERSION=1.1.3`，而 v1.2.0 release guard 要求 `1.2.0`。
-- Sanitized evidence apply：run `33047369931`，artifact 下载、evidence-gated promotion、file-exact scope guard 与 commit 全部 PASS。
-- 最终 PR 前 CI 继续使用 Python `3.10 / 3.12 / 3.13` 的 offline matrix；不注入 TikHub Key，也不执行付费请求。
-
-## Security / repository boundary
-
-本 release **不提交**：
-
-- TikHub API Key；
-- 本地 `config.json`；
-- raw Provider response；
-- `live-validation.json`；
-- live-validation 本地输出目录；
-- 一次性付费 Provider workflow / trigger marker；
-- 一次性 evidence-apply workflow / trigger marker。
-
-常规 CI 保持 offline，不注入 TikHub Key，不产生付费请求。
-
-## License
-
-当前仓库仍未声明许可证；v1.2.0 不添加 MIT、Apache-2.0 或其他许可证。
-'''
-          release_path.write_text(release, encoding='utf-8')
+          release_path.write_text(release_doc, encoding='utf-8')
           version_path.write_text('1.2.0\n', encoding='utf-8')
-
           assert version_path.read_text(encoding='utf-8').strip() == '1.2.0'
-          final_readme = readme_path.read_text(encoding='utf-8')
-          assert '当前版本：`1.2.0`' in final_readme
-          assert 'provider-default' in final_readme
+          assert '当前版本：`1.2.0`' in readme_path.read_text(encoding='utf-8')
+          assert 'provider-default' in readme_path.read_text(encoding='utf-8')
           assert '# Modular Research v1.2.0 发布说明' in release_path.read_text(encoding='utf-8')
           PY
       - name: Commit release metadata only
