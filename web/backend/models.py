@@ -1,7 +1,7 @@
 """Typed read models exposed by the Research Workbench backend."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -20,6 +20,28 @@ class Page(BaseModel):
     page: int = 1
     page_size: int = 50
     total: int = 0
+
+
+class StageState(BaseModel):
+    name: str
+    status: Literal["COMPLETED", "RUNNING", "SKIPPED", "FAILED", "PLANNED", "UNAVAILABLE"]
+    status_basis: Literal["execution", "artifact", "inferred", "unavailable"]
+    calls_attempted: int | None = None
+    calls_succeeded: int | None = None
+    calls_failed: int | None = None
+    summary: dict[str, Any] | None = None
+
+
+class ExecutionSummary(BaseModel):
+    expected_requests: int | None = None
+    max_requests: int | None = None
+    expected_cost_usd: float | None = None
+    max_cost_usd: float | None = None
+    calls_attempted: int | None = None
+    calls_succeeded: int | None = None
+    calls_failed: int | None = None
+    actual_estimated_cost_usd: float | None = None
+    stages: list[StageState] = Field(default_factory=list)
 
 
 class RunSummary(BaseModel):
