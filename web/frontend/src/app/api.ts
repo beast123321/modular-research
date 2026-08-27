@@ -1,4 +1,4 @@
-import type { BriefSummary, CreatorDetail, CreatorSummary, EvidenceDetail, FindingSummary, HypothesisSummary, InsightSummary, LineageGraph, MediaSummary, Page, PatternSummary, ReportSummary, RunSummary, VideoDetail, VideoSummary, VocSummary } from "./types";
+import type { BriefSummary, CreatorDetail, CreatorSummary, EvidenceDetail, ExecutionSummary, FindingSummary, HypothesisSummary, InsightSummary, LineageGraph, MediaSummary, Page, PatternSummary, ReportSummary, RunSummary, VideoDetail, VideoSummary, VocSummary } from "./types";
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path, { headers: { Accept: "application/json" } });
@@ -74,4 +74,8 @@ export function listBriefs(runId: string): Promise<BriefSummary[]> {
 
 export function getReport(runId: string): Promise<ReportSummary> {
   return getJson<ReportSummary>(`/api/runs/${encodeURIComponent(runId)}/report`);
+}
+
+export function getExecution(runId: string): Promise<ExecutionSummary> {
+  return getJson<ExecutionSummary>(`/api/runs/${encodeURIComponent(runId)}/execution`);
 }

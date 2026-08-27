@@ -199,3 +199,28 @@ export type ReportSummary = {
   notice: string | null;
   available_structured_artifacts?: string[];
 };
+
+export type StageStatus = "COMPLETED" | "RUNNING" | "SKIPPED" | "FAILED" | "PLANNED" | "UNAVAILABLE";
+export type StageStatusBasis = "execution" | "artifact" | "inferred" | "unavailable";
+
+export type StageState = {
+  name: string;
+  status: StageStatus;
+  status_basis: StageStatusBasis;
+  calls_attempted: number | null;
+  calls_succeeded: number | null;
+  calls_failed: number | null;
+  summary: Record<string, unknown> | null;
+};
+
+export type ExecutionSummary = {
+  expected_requests: number | null;
+  max_requests: number | null;
+  expected_cost_usd: number | null;
+  max_cost_usd: number | null;
+  calls_attempted: number | null;
+  calls_succeeded: number | null;
+  calls_failed: number | null;
+  actual_estimated_cost_usd: number | null;
+  stages: StageState[];
+};

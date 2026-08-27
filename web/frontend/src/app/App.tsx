@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router-dom";
 import { CreatorDetailPage } from "../pages/CreatorDetailPage";
 import { CreatorsPage } from "../pages/CreatorsPage";
 import { EvidenceDetailPage } from "../pages/EvidenceDetailPage";
+import { ExecutionPage } from "../pages/ExecutionPage";
 import { IntelligencePage } from "../pages/IntelligencePage";
 import { MediaPage } from "../pages/MediaPage";
 import { ReportPage } from "../pages/ReportPage";
@@ -23,6 +24,7 @@ export function App() {
       <Route path="/runs/:runId/media" element={<MediaPage />} />
       <Route path="/runs/:runId/intelligence" element={<IntelligencePage />} />
       <Route path="/runs/:runId/report" element={<ReportPage />} />
+      <Route path="/runs/:runId/execution" element={<ExecutionPage />} />
       <Route path="*" element={<RunsPage />} />
     </Routes>
   );
