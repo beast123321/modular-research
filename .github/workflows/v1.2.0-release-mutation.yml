@@ -1,0 +1,102 @@
+name: v1.2.0 offline evidence apply
+
+on:
+  push:
+    branches:
+      - release/v1.2.0-tiktok-provider-verification
+    paths:
+      - .github/v1.2.0-release-mutation-trigger
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  apply-sanitized-evidence:
+    if: github.event.head_commit.message == 'chore: apply approved v1.2.0 sanitized TikTok evidence'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v1.2.0-tiktok-provider-verification
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download already-produced sanitized evidence artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          EVIDENCE="${RUNNER_TEMP}/v1.2.0-evidence"
+          mkdir -p "$EVIDENCE"
+          gh run download 33042209247 \
+            --repo beast123321/modular-research \
+            --name v1.2.0-tiktok-provider-verification-evidence \
+            --dir "$EVIDENCE"
+          test -s "$EVIDENCE/live-validation.json"
+          test -s "$EVIDENCE/verification-manifest.json"
+      - name: Apply evidence-gated registry promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          EVIDENCE="${RUNNER_TEMP}/v1.2.0-evidence"
+          PYTHONPATH=scripts python scripts/provider_verification.py \
+            --report "$EVIDENCE/live-validation.json" \
+            --platform tiktok \
+            --registry references/endpoints.json \
+            --manifest-out references/verifications/tiktok-provider-verification-v1.2.0.json \
+            --apply > "${RUNNER_TEMP}/provider-verification-output.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          expected = {
+              'ad_percentile',
+              'ads_detail',
+              'ads_search',
+              'creator_posts',
+              'creator_search_insights',
+              'creator_search_insights_trend',
+              'top_ads_spotlight',
+              'top_contents_list',
+              'video_comments',
+              'video_detail',
+              'video_metrics',
+              'video_search',
+          }
+          manifest = json.loads(Path('references/verifications/tiktok-provider-verification-v1.2.0.json').read_text(encoding='utf-8'))
+          assert manifest['platform'] == 'tiktok'
+          assert manifest['verified_at'] == '2026-08-27'
+          assert manifest['source_status'] == 'COMPLETED'
+          assert manifest['validation_calls'] == {'attempted': 12, 'succeeded': 12, 'failed': 0}
+          assert manifest['pricing_basis'] == 'provider_default'
+          assert set(manifest['promoted_capabilities']) == expected
+          assert manifest['non_promoted_capabilities'] == []
+
+          registry = json.loads(Path('references/endpoints.json').read_text(encoding='utf-8'))
+          tiktok = [e for e in registry['endpoints'] if e.get('provider') == 'tikhub' and e.get('platform') == 'tiktok']
+          promoted = {e['capability'] for e in tiktok if e.get('status') == 'live_verified'}
+          assert promoted == expected
+          for entry in tiktok:
+              if entry['capability'] in expected:
+                  assert entry['unit_price_usd'] is None
+                  assert entry['verification_basis'] == 'real_provider_response'
+                  assert entry['normalizer_validation'] == 'PASS'
+              else:
+                  assert entry['status'] == 'documented'
+          PY
+      - name: Commit only registry and sanitized manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short
+          changed="$(git status --short | awk '{print $2}' | sort)"
+          expected="$(printf '%s\n' references/endpoints.json references/verifications/tiktok-provider-verification-v1.2.0.json | sort)"
+          test "$changed" = "$expected"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add references/endpoints.json references/verifications/tiktok-provider-verification-v1.2.0.json
+          git commit -m 'feat: record v1.2.0 TikTok provider evidence'
+          git push origin HEAD:release/v1.2.0-tiktok-provider-verification
