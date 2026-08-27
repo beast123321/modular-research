@@ -54,3 +54,22 @@ jobs:
         run: python scripts/release_check.py --root .
       - name: Core environment check
         run: python scripts/check_environment.py --mode core
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Run frontend tests
+        run: npm run test:ci
+      - name: Build frontend
+        run: npm run build
