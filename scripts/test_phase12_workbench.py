@@ -134,5 +134,64 @@ class Phase12EvidenceTests(unittest.TestCase):
         finally: td.cleanup()
 
 
+class Phase12MediaIntelligenceTests(unittest.TestCase):
+    def test_keyframe_resolver_rejects_path_outside_run(self):
+        from web.backend.media_service import resolve_keyframe_path
+        td, repo = _fixture_repo()
+        try:
+            db = repo.run_dir("run_fixture") / "run.sqlite"
+            outside = repo.runs_root.parent / "outside.jpg"
+            conn = sqlite3.connect(db)
+            try:
+                conn.execute(
+                    "INSERT INTO media_keyframes(id,run_id,video_id,timestamp_sec,local_path,scene_index,ocr_text,ocr_confidence,evidence_refs_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    ("frame-outside", "run_fixture", "video_fixture", 1.0, str(outside), 1, None, None, "[]", "2026-08-27T00:00:00+00:00"),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            with self.assertRaises(ValueError):
+                resolve_keyframe_path(repo, "run_fixture", "video_fixture", "frame-outside")
+        finally: td.cleanup()
+
+    def test_media_detail_includes_keyframes_transcript_and_creative_analysis(self):
+        td, repo = _fixture_repo()
+        try:
+            media = repo.get_media("run_fixture", "video_fixture")
+            self.assertEqual(media["asset"]["status"], "not_downloaded")
+            self.assertEqual(media["keyframes"][0]["ocr_text"], "领导说方案不行")
+            self.assertEqual(media["transcripts"][0]["text"], "领导说方案不行")
+            self.assertEqual(media["creative_analysis"][0]["analyzer_name"], "fixture-agent")
+        finally: td.cleanup()
+
+    def test_report_does_not_fabricate_missing_final_report(self):
+        td, repo = _fixture_repo()
+        try:
+            (repo.run_dir("run_fixture") / "reports" / "final_report.md").unlink()
+            report = repo.get_report("run_fixture")
+            self.assertFalse(report["persisted_final_report"])
+            self.assertIn("Final report not persisted", report["notice"])
+        finally: td.cleanup()
+
+    def test_persisted_final_report_is_returned_verbatim(self):
+        td, repo = _fixture_repo()
+        try:
+            report = repo.get_report("run_fixture")
+            self.assertTrue(report["persisted_final_report"])
+            self.assertEqual(report["artifact"], "final_report.md")
+            self.assertIn("Fixture Research Report", report["markdown"])
+        finally: td.cleanup()
+
+    def test_intelligence_preserves_evidence_refs(self):
+        td, repo = _fixture_repo()
+        try:
+            findings = repo.list_findings("run_fixture")
+            self.assertEqual(findings[0]["evidence_refs"], ["raw:fixture:0001"])
+            hypotheses = repo.list_hypotheses("run_fixture")
+            self.assertEqual(hypotheses[0]["status"], "PROPOSED")
+            self.assertEqual(hypotheses[0]["evidence_refs"], ["raw:fixture:0001"])
+        finally: td.cleanup()
+
+
 if __name__ == "__main__":
     unittest.main()
