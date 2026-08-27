@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "platform": "tiktok",
+  "verified_at": "2026-08-27",
+  "source_status": "COMPLETED",
+  "validation_calls": {
+    "attempted": 12,
+    "succeeded": 12,
+    "failed": 0
+  },
+  "pricing_basis": "provider_default",
+  "promoted_capabilities": [
+    "ad_percentile",
+    "ads_detail",
+    "ads_search",
+    "creator_posts",
+    "creator_search_insights",
+    "creator_search_insights_trend",
+    "top_ads_spotlight",
+    "top_contents_list",
+    "video_comments",
+    "video_detail",
+    "video_metrics",
+    "video_search"
+  ],
+  "non_promoted_capabilities": []
+}
