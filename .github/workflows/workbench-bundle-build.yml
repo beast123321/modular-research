@@ -16,7 +16,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 1
+      - name: Verify exact clean checkout
+        run: |
+          set -euo pipefail
+          echo "HEAD=$(git rev-parse HEAD)"
+          echo "GITHUB_SHA=${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git reset --hard "$GITHUB_SHA"
+          git clean -fd -- web/frontend/dist web/frontend/tsconfig.tsbuildinfo
+          dirty="$(git status --porcelain=v1 -uall)"
+          if [ -n "$dirty" ]; then
+            echo "Checkout is unexpectedly dirty before build:"
+            printf '%s\n' "$dirty"
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
