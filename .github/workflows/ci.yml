@@ -24,9 +24,12 @@ jobs:
         run: |
           set -euo pipefail
           for test_file in \
+            scripts/test_phase14_workbench_bundle.py \
             scripts/test_phase13_tiktok_release.py \
             scripts/test_phase12_tiktok_provider_verification.py \
             scripts/test_phase12_provider_integrity.py \
+            scripts/test_phase12_workbench.py \
+            scripts/test_phase12_http.py \
             scripts/test_phase11_provider_verification.py \
             scripts/test_phase10_live_validation.py \
             scripts/test_phase9_budget.py \
@@ -47,8 +50,27 @@ jobs:
       - name: Run legacy regression suite
         run: python scripts/test_skill.py
       - name: Compile Python sources
-        run: python -m compileall -q scripts
+        run: python -m compileall -q scripts web
       - name: Public release audit
         run: python scripts/release_check.py --root .
       - name: Core environment check
         run: python scripts/check_environment.py --mode core
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Run frontend tests
+        run: npm run test:ci
+      - name: Build frontend
+        run: npm run build

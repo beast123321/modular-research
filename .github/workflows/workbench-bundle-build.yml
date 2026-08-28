@@ -1,0 +1,104 @@
+name: workbench-bundle-build
+
+on:
+  push:
+    branches:
+      - feat/research-workbench-v1.2.0
+    paths:
+      - .github/workbench-bundle-build-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - name: Verify exact clean checkout
+        run: |
+          set -euo pipefail
+          echo "HEAD=$(git rev-parse HEAD)"
+          echo "GITHUB_SHA=${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git reset --hard "$GITHUB_SHA"
+          git clean -fd -- web/frontend/dist web/frontend/tsconfig.tsbuildinfo
+          dirty="$(git status --porcelain=v1 -uall)"
+          if [ -n "$dirty" ]; then
+            echo "Checkout is unexpectedly dirty before build:"
+            printf '%s\n' "$dirty"
+            exit 1
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: web/frontend
+        run: npm ci
+      - name: Build committed Workbench bundle
+        working-directory: web/frontend
+        run: npm run build
+      - name: Remove uncommitted TypeScript build metadata
+        run: rm -f web/frontend/tsconfig.tsbuildinfo
+      - name: Diagnose tracked changes after build
+        run: |
+          set -euo pipefail
+          echo "=== git status after build ==="
+          git status --porcelain=v1 -uall
+          echo "=== tracked diff summary after build ==="
+          git diff --summary || true
+          echo "=== temporary workflow/trigger diff after build ==="
+          git diff -- .github/workflows/workbench-bundle-build.yml .github/workbench-bundle-build-trigger || true
+      - name: Restore tracked input state
+        run: |
+          set -euo pipefail
+          git restore --source="$GITHUB_SHA" --staged --worktree -- .
+          rm -f web/frontend/tsconfig.tsbuildinfo
+          if ! git diff --quiet; then
+            echo "Tracked worktree differs from exact input SHA after restore"
+            git status --porcelain=v1 -uall
+            exit 1
+          fi
+          unexpected_untracked="$(git ls-files --others --exclude-standard)"
+          if [ -n "$unexpected_untracked" ]; then
+            echo "Unexpected non-ignored untracked files:"
+            printf '%s\n' "$unexpected_untracked"
+            exit 1
+          fi
+      - name: Verify committed bundle exists
+        run: |
+          set -euo pipefail
+          test -f web/frontend/dist/index.html
+          test -d web/frontend/dist/assets
+          test -n "$(find web/frontend/dist/assets -type f -print -quit)"
+          git diff --exit-code -- web/frontend/package.json web/frontend/package-lock.json
+      - name: Stage and verify bundle-only scope
+        run: |
+          set -euo pipefail
+          git add -f web/frontend/dist
+          staged="$(git diff --cached --name-only)"
+          printf '%s\n' "$staged"
+          test -n "$staged"
+          unexpected="$(printf '%s\n' "$staged" | grep -Ev '^web/frontend/dist/' || true)"
+          if [ -n "$unexpected" ]; then
+            echo "Unexpected staged files:"
+            printf '%s\n' "$unexpected"
+            exit 1
+          fi
+          if ! git diff --quiet; then
+            echo "Unexpected unstaged tracked changes remain:"
+            git status --porcelain=v1 -uall
+            exit 1
+          fi
+      - name: Commit bundle only
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "build(workbench): commit Node-free frontend bundle"
+          git push origin HEAD:feat/research-workbench-v1.2.0
