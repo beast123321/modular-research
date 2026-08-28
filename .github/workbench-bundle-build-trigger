@@ -1,1 +1,1 @@
-rebuild committed Workbench dist after tsbuildinfo cleanup
+rebuild committed Workbench dist with exact clean checkout
