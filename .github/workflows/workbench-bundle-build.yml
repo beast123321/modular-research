@@ -28,6 +28,8 @@ jobs:
       - name: Build committed Workbench bundle
         working-directory: web/frontend
         run: npm run build
+      - name: Remove uncommitted TypeScript build metadata
+        run: rm -f web/frontend/tsconfig.tsbuildinfo
       - name: Verify generated file scope
         run: |
           set -euo pipefail
