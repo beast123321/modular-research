@@ -1,0 +1,59 @@
+name: workbench-bundle-build
+
+on:
+  push:
+    branches:
+      - feat/research-workbench-v1.2.0
+    paths:
+      - .github/workbench-bundle-build-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: web/frontend
+        run: npm ci
+      - name: Build committed Workbench bundle
+        working-directory: web/frontend
+        run: npm run build
+      - name: Verify generated file scope
+        run: |
+          set -euo pipefail
+          test -f web/frontend/dist/index.html
+          test -d web/frontend/dist/assets
+          test -n "$(find web/frontend/dist/assets -type f -print -quit)"
+          git diff --exit-code -- web/frontend/package.json web/frontend/package-lock.json
+          unexpected="$(git status --porcelain=v1 -uall | awk '{print $2}' | grep -Ev '^web/frontend/dist/' || true)"
+          if [ -n "$unexpected" ]; then
+            echo "Unexpected generated files:"
+            printf '%s\n' "$unexpected"
+            exit 1
+          fi
+      - name: Commit bundle only
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f web/frontend/dist
+          staged="$(git diff --cached --name-only)"
+          test -n "$staged"
+          unexpected="$(printf '%s\n' "$staged" | grep -Ev '^web/frontend/dist/' || true)"
+          if [ -n "$unexpected" ]; then
+            echo "Unexpected staged files:"
+            printf '%s\n' "$unexpected"
+            exit 1
+          fi
+          git commit -m "build(workbench): commit Node-free frontend bundle"
+          git push origin HEAD:feat/research-workbench-v1.2.0
