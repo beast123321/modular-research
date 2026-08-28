@@ -305,7 +305,12 @@ class CliIntegrationTests(unittest.TestCase):
         import run_research
         req = make_request(goals=['hooks'], depth='quick', seeds=[])
         plan = run_research.build_v2_stage_plan(req)
-        ok, reason = run_research.validate_v2_execution_gate(plan, yes=True, max_budget_usd=plan.max_cost_usd + 0.01)
+        ok, reason = run_research.validate_v2_execution_gate(
+            plan,
+            yes=True,
+            max_budget_usd=plan.max_cost_usd + 0.01,
+            allow_documented_capabilities=True,
+        )
         self.assertTrue(ok, reason)
 if __name__ == '__main__':
     unittest.main()

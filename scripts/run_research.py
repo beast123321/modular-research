@@ -50,13 +50,33 @@ def load_research_request_from_args(args) -> ResearchRequest | None:
 def build_v2_stage_plan(request: ResearchRequest):
     return _build_stage_plan(request)
 
-def validate_v2_execution_gate(plan, *, yes: bool, max_budget_usd: float | None) -> tuple[bool, str]:
+def validate_v2_execution_gate(
+    plan,
+    *,
+    yes: bool,
+    max_budget_usd: float | None,
+    allow_documented_capabilities: bool = False,
+) -> tuple[bool, str]:
     if not yes:
         return (False, 'V2 真实执行需要显式 --yes。')
     if max_budget_usd is None:
         return (False, 'V2 真实执行需要 --max-budget-usd 预算上限。')
     if float(max_budget_usd) < float(plan.max_cost_usd):
         return (False, f'预算不足：--max-budget-usd={float(max_budget_usd):.6f}，计划最大成本={float(plan.max_cost_usd):.6f} USD。')
+    documented = sorted({
+        task.capability
+        for stage in plan.stages
+        for task in stage.tasks
+        if getattr(task, 'verification_status', 'unknown') == 'documented'
+        and (task.expected_requests or task.max_requests)
+    })
+    if documented and not allow_documented_capabilities:
+        return (
+            False,
+            '计划包含仅 documented、尚未 live_verified 的 capability：'
+            + ', '.join(documented)
+            + '。默认拒绝真实执行；如明确接受该证据风险，请显式传 --allow-documented-capabilities。',
+        )
     return (True, 'approved')
 
 def build_intake_plan(request: ResearchRequest) -> dict:
@@ -278,7 +298,7 @@ def _render_markdown(r:dict)->str:
     return '\n'.join(lines)
 
 def main()->int:
-    p=argparse.ArgumentParser(description='modular-research 流水线编排（SKILL 七步）'); p.add_argument('--goal',required=False,help='Legacy goal text; V2 requests use --request or structured convenience args');p.add_argument('--request',help='V2 ResearchRequest JSON path');p.add_argument('--topic',help='V2 research topic');p.add_argument('--platform',help='V2 platform, e.g. tiktok or douyin');p.add_argument('--market',help='V2 market/region, e.g. US, GB, CA');p.add_argument('--research-goal',action='append',default=[],help='V2 controlled research goal; repeat for multiple goals');p.add_argument('--reference-url',action='append',default=[],help='V2 reference content URL; repeat for multiple references');p.add_argument('--depth',choices=['quick','standard','deep'],default='standard',help='V2 default sampling depth');p.add_argument('--keywords',nargs='*',default=[]);p.add_argument('--videos-per-keyword',type=int,default=10);p.add_argument('--accounts-to-profile',type=int,default=20);p.add_argument('--comment-videos',type=int,default=5,help='取前 N 个视频的评论');p.add_argument('--video-ids',nargs='*',default=[],help='免费路径：已知视频ID（跳过付费搜索）');p.add_argument('--angles',nargs='*',default=[],help='候选选题角度，用于计算选题空位');p.add_argument('--out',default=DEFAULT_OUT);g=p.add_mutually_exclusive_group(required=False);g.add_argument('--only-free',action='store_true',help='免费路径：用 --video-ids 已知ID，不触发付费搜索');g.add_argument('--with-search',action='store_true',help='付费全链路：先 video_search 发现视频池（需付费余额）');g.add_argument('--billboard',action='store_true',help='榜单发现：用低粉爆款榜直接发现视频（免关键词、免费额度）');p.add_argument('--demo',action='store_true',help='离线演练：叠加在以上模式上，用合成数据走完整编排 I/O（不联网不花钱）');p.add_argument('--billboard-type',default='billboard_low_fan',choices=['billboard_low_fan','billboard_hot_video','billboard_topic','billboard_challenge'],help='榜单类型（默认 billboard_low_fan 低粉爆款榜）');p.add_argument('--plan-only',action='store_true',help='只打印费用预览，不发任何请求');p.add_argument('--yes',action='store_true',help='显式确认：允许发起付费请求');p.add_argument('--max-budget-usd',type=float,default=None,help='V2 真实执行的硬预算上限；低于计划 max cost 时拒绝执行');p.add_argument('--download-media',action='store_true',help='V2 创意研究：显式允许下载 shortlist 视频并提取关键帧/OCR；默认仅准备分析请求');p.add_argument('--media-limit',type=int,default=None,help='V2 创意研究：覆盖 Profile 的媒体 shortlist 上限');p.add_argument('--base-url',default=core.DEFAULT_BASE_URL,help='API 域名，默认 api.tikhub.dev（国内加速）；海外用 https://api.tikhub.io');p.add_argument('--config',default=str(DEFAULT_CONFIG),help='密钥配置文件路径（JSON，含 api_key 字段）；默认 ../config.json');args=p.parse_args()
+    p=argparse.ArgumentParser(description='modular-research 流水线编排（SKILL 七步）'); p.add_argument('--goal',required=False,help='Legacy goal text; V2 requests use --request or structured convenience args');p.add_argument('--request',help='V2 ResearchRequest JSON path');p.add_argument('--topic',help='V2 research topic');p.add_argument('--platform',help='V2 platform, e.g. tiktok or douyin');p.add_argument('--market',help='V2 market/region, e.g. US, GB, CA');p.add_argument('--research-goal',action='append',default=[],help='V2 controlled research goal; repeat for multiple goals');p.add_argument('--reference-url',action='append',default=[],help='V2 reference content URL; repeat for multiple references');p.add_argument('--depth',choices=['quick','standard','deep'],default='standard',help='V2 default sampling depth');p.add_argument('--keywords',nargs='*',default=[]);p.add_argument('--videos-per-keyword',type=int,default=10);p.add_argument('--accounts-to-profile',type=int,default=20);p.add_argument('--comment-videos',type=int,default=5,help='取前 N 个视频的评论');p.add_argument('--video-ids',nargs='*',default=[],help='免费路径：已知视频ID（跳过付费搜索）');p.add_argument('--angles',nargs='*',default=[],help='候选选题角度，用于计算选题空位');p.add_argument('--out',default=DEFAULT_OUT);g=p.add_mutually_exclusive_group(required=False);g.add_argument('--only-free',action='store_true',help='免费路径：用 --video-ids 已知ID，不触发付费搜索');g.add_argument('--with-search',action='store_true',help='付费全链路：先 video_search 发现视频池（需付费余额）');g.add_argument('--billboard',action='store_true',help='榜单发现：用低粉爆款榜直接发现视频（免关键词、免费额度）');p.add_argument('--demo',action='store_true',help='离线演练：叠加在以上模式上，用合成数据走完整编排 I/O（不联网不花钱）');p.add_argument('--billboard-type',default='billboard_low_fan',choices=['billboard_low_fan','billboard_hot_video','billboard_topic','billboard_challenge'],help='榜单类型（默认 billboard_low_fan 低粉爆款榜）');p.add_argument('--plan-only',action='store_true',help='只打印费用预览，不发任何请求');p.add_argument('--yes',action='store_true',help='显式确认：允许发起付费请求');p.add_argument('--max-budget-usd',type=float,default=None,help='V2 真实执行的硬预算上限；低于计划 max cost 时拒绝执行');p.add_argument('--allow-documented-capabilities',action='store_true',help='V2 真实执行：显式允许调用仅 documented、尚未 live_verified 的 capability');p.add_argument('--download-media',action='store_true',help='V2 创意研究：显式允许下载 shortlist 视频并提取关键帧/OCR；默认仅准备分析请求');p.add_argument('--media-limit',type=int,default=None,help='V2 创意研究：覆盖 Profile 的媒体 shortlist 上限');p.add_argument('--base-url',default=core.DEFAULT_BASE_URL,help='API 域名，默认 api.tikhub.dev（国内加速）；海外用 https://api.tikhub.io');p.add_argument('--config',default=str(DEFAULT_CONFIG),help='密钥配置文件路径（JSON，含 api_key 字段）；默认 ../config.json');args=p.parse_args()
     try:v2_request=load_research_request_from_args(args)
     except (ValueError,OSError,json.JSONDecodeError) as exc:print(f'ResearchRequest 无效: {exc}');return 2
     if v2_request is not None:
@@ -288,7 +308,7 @@ def main()->int:
         except ValueError as exc:print(f'V2 计划生成失败: {exc}');return 2
         print(json.dumps(stage_plan.to_dict(),ensure_ascii=False,indent=2))
         if args.plan_only:return 0
-        ok,reason=validate_v2_execution_gate(stage_plan,yes=args.yes,max_budget_usd=args.max_budget_usd)
+        ok,reason=validate_v2_execution_gate(stage_plan,yes=args.yes,max_budget_usd=args.max_budget_usd,allow_documented_capabilities=args.allow_documented_capabilities)
         if not ok:print(reason);return 2
         api_key,key_source=core.resolve_api_key(config_path=args.config)
         if not api_key:print('未找到 TikHub API Key；请使用 TIKHUB_API_KEY、config.json 或系统 Keychain。');return 2

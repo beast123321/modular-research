@@ -65,6 +65,8 @@ class PlanTask:
     unit_price_usd: str | None = None
     price_source: str = "unknown"
     is_endpoint_exact: bool = False
+    verification_status: str = "unknown"
+    verification_basis: str | None = None
     dependencies: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -232,6 +234,8 @@ def _make_task(
         unit_price_usd=pricing["unit_price_usd"],
         price_source=pricing["price_source"],
         is_endpoint_exact=bool(pricing["is_endpoint_exact"]),
+        verification_status=str(entry.get("status") or "unknown"),
+        verification_basis=(str(entry["verification_basis"]) if entry.get("verification_basis") else None),
         dependencies=list(dependencies or []),
     )
 
@@ -466,6 +470,15 @@ def build_stage_plan(
     profile_id = str(profile["id"])
     provider = str(profile.get("default_provider") or "tikhub")
     preset = _DEPTH[request.depth]
+    candidate_limit = _sample_limit(request, "candidate_limit", preset["candidate_limit"])
+    creator_limit = _sample_limit(request, "creator_limit", preset["creator_limit"])
+    comment_video_limit = _sample_limit(request, "comment_video_limit", preset["comment_video_limit"])
+    comment_pages = _sample_limit(request, "comment_pages", preset["comment_pages"])
+    ads_limit = _sample_limit(request, "ads_limit", preset["ads_limit"])
+    ad_deep_limit = _sample_limit(request, "ad_deep_limit", preset["ad_deep_limit"])
+    top_contents_detail_limit = _sample_limit(
+        request, "top_contents_detail_limit", preset["top_contents_detail_limit"]
+    )
     keywords = _keyword_universe(request, preset["keyword_limit"])
     goals = set(request.research_goals)
     days = int(request.time_range.get("days") or 90)
@@ -508,11 +521,11 @@ def build_stage_plan(
         period_end = int(datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
         period_dimension = 5 if days > 30 else 1
         top_calls = [
-            {"period_end_timestamp": period_end, "period_dimension": period_dimension, "country_code": market, "order_by_metric": metric, "organic_only": True, "page": 1, "limit": min(100, preset["candidate_limit"])}
+            {"period_end_timestamp": period_end, "period_dimension": period_dimension, "country_code": market, "order_by_metric": metric, "organic_only": True, "page": 1, "limit": min(100, candidate_limit)}
             for metric in (1, 2, 3)
         ]
         organic_tasks.append(_make_task(reg, provider, "top_contents_list", static_calls=top_calls))
-        organic_tasks.append(_make_task(reg, provider, "top_contents_item_detail", mode="per_top_content", variants=[{"period_end_timestamp": period_end, "period_dimension": period_dimension, "country_code": market}], max_items=preset["top_contents_detail_limit"], dependencies=["top_contents_list"]))
+        organic_tasks.append(_make_task(reg, provider, "top_contents_item_detail", mode="per_top_content", variants=[{"period_end_timestamp": period_end, "period_dimension": period_dimension, "country_code": market}], max_items=top_contents_detail_limit, dependencies=["top_contents_list"]))
     stages.append(PlanStage("ORGANIC_DISCOVERY", organic_tasks))
     stages.append(PlanStage("CHEAP_RANKING", local_only=True))
 
@@ -520,39 +533,35 @@ def build_stage_plan(
         creator_variants = [{"max_cursor": 0, "count": 20, "sort_type": 1}]
         if request.depth != "quick":
             creator_variants = [{"max_cursor": 0, "count": 20, "sort_type": 0}, {"max_cursor": 0, "count": 20, "sort_type": 1}]
-        creator_limit = preset["creator_limit"]
         stages.append(PlanStage("CREATOR_CONTEXT", [
             _make_task(reg, provider, "creator_posts", mode="per_creator", variants=creator_variants, max_items=creator_limit, dependencies=["ORGANIC_DISCOVERY"]),
-            _make_task(reg, provider, "video_metrics", mode="per_video", max_items=min(preset["candidate_limit"], preset["creator_limit"] * 2), dependencies=["ORGANIC_DISCOVERY"]),
+            _make_task(reg, provider, "video_metrics", mode="per_video", max_items=min(candidate_limit, creator_limit * 2), dependencies=["ORGANIC_DISCOVERY"]),
         ]))
 
     if need_ads:
         ad_period = map_ads_period(days)
         ad_calls = []
         for keyword in keywords:
-            body = {"keyword": keyword, "objective": 0, "like": 0, "period": ad_period, "page": 1, "limit": min(50, preset["ads_limit"]), "order_by": "for_you", "country_code": market, "ad_format": 0}
+            body = {"keyword": keyword, "objective": 0, "like": 0, "period": ad_period, "page": 1, "limit": min(50, ads_limit), "order_by": "for_you", "country_code": market, "ad_format": 0}
             if language:
                 body["ad_language"] = language
             ad_calls.append(body)
         stages.append(PlanStage("ADS_DISCOVERY", [
             _make_task(reg, provider, "ads_search", static_calls=ad_calls),
-            _make_task(reg, provider, "top_ads_spotlight", static_calls=[{"page": 1, "limit": min(20, preset["ads_limit"])}]),
+            _make_task(reg, provider, "top_ads_spotlight", static_calls=[{"page": 1, "limit": min(20, ads_limit)}]),
         ]))
 
     if need_voc:
-        limit = preset["comment_video_limit"]
-        pages = preset["comment_pages"]
         stages.append(PlanStage("VOC", [
-            _make_task(reg, provider, "video_comments", mode="per_video", variants=[{"cursor": 0, "count": 20}], max_items=limit, pages_per_item=pages, expected_requests=limit, max_requests=limit * pages, dependencies=["ORGANIC_DISCOVERY"])
+            _make_task(reg, provider, "video_comments", mode="per_video", variants=[{"cursor": 0, "count": 20}], max_items=comment_video_limit, pages_per_item=comment_pages, expected_requests=comment_video_limit, max_requests=comment_video_limit * comment_pages, dependencies=["ORGANIC_DISCOVERY"])
         ]))
 
     if need_ads:
-        deep = preset["ad_deep_limit"]
         stages.append(PlanStage("CREATIVE_ANALYSIS", [
-            _make_task(reg, provider, "ads_detail", mode="per_ad", max_items=deep, dependencies=["ADS_DISCOVERY"]),
-            _make_task(reg, provider, "ad_percentile", mode="per_ad", max_items=deep, variants=[{"metric": "ctr_percentile", "period_type": 180}], dependencies=["ADS_DISCOVERY"]),
-            _make_task(reg, provider, "ad_keyframe_analysis", mode="per_ad", max_items=deep, variants=[{"metric": "retain_ctr"}, {"metric": "retain_cvr"}], dependencies=["ADS_DISCOVERY"]),
-            _make_task(reg, provider, "ad_interactive_analysis", mode="per_ad", max_items=deep, variants=[{"metric_type": "remain", "period_type": 180}], dependencies=["ADS_DISCOVERY"]),
+            _make_task(reg, provider, "ads_detail", mode="per_ad", max_items=ad_deep_limit, dependencies=["ADS_DISCOVERY"]),
+            _make_task(reg, provider, "ad_percentile", mode="per_ad", max_items=ad_deep_limit, variants=[{"metric": "ctr_percentile", "period_type": 180}], dependencies=["ADS_DISCOVERY"]),
+            _make_task(reg, provider, "ad_keyframe_analysis", mode="per_ad", max_items=ad_deep_limit, variants=[{"metric": "retain_ctr"}, {"metric": "retain_cvr"}], dependencies=["ADS_DISCOVERY"]),
+            _make_task(reg, provider, "ad_interactive_analysis", mode="per_ad", max_items=ad_deep_limit, variants=[{"metric_type": "remain", "period_type": 180}], dependencies=["ADS_DISCOVERY"]),
         ]))
 
     if goals & VIDEO_UNDERSTANDING_GOALS:
@@ -564,6 +573,7 @@ def build_stage_plan(
         "TikHub 未提供端点级单价时按 provider default $0.001/成功请求估算；真实执行前应使用 provider 报价能力复核。",
         "成本按计划请求上限估算，不包含失败请求重试；TikHub 非 200 响应是否计费以 provider 当前规则为准。",
         f"未指定 time_range.days 时默认使用 90 天；当前映射为 TikTok publish_time={publish}、Ads period={map_ads_period(days)}。",
+        f"TikTok 付费深挖采样上限：candidate_limit={candidate_limit}, creator_limit={creator_limit}, comment_video_limit={comment_video_limit}, comment_pages={comment_pages}, ads_limit={ads_limit}, ad_deep_limit={ad_deep_limit}, top_contents_detail_limit={top_contents_detail_limit}；可通过 sample_size_overrides 显式覆盖。",
         "动态阶段的实际请求数取决于上游能提取到的 search insight/video/creator/top-content/ad 标识，可能低于计划上限。",
     ]
     return StageResearchPlan(
